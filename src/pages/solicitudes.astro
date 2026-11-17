@@ -1,0 +1,163 @@
+---
+import Panel from '../layouts/Panel.astro';
+---
+<Panel titulo="Solicitudes del sitio" activo="solicitudes">
+  <section class="resumen">
+    <button class="tarjeta mini activo" data-estado=""><p>Todas</p><strong id="c-todas">0</strong></button>
+    <button class="tarjeta mini nueva" data-estado="Nueva"><p>Nuevas</p><strong id="c-nueva">0</strong></button>
+    <button class="tarjeta mini contactado" data-estado="Contactado"><p>Contactadas</p><strong id="c-contactado">0</strong></button>
+    <button class="tarjeta mini cerrada" data-estado="Cerrada"><p>Cerradas</p><strong id="c-cerrada">0</strong></button>
+  </section>
+
+  <div class="tarjeta barra">
+    <div class="herramientas">
+      <div class="buscador"><input class="control" id="buscar" placeholder="Buscar por nombre, teléfono o cuenta..." /></div>
+      <select class="control" id="filtro-tipo">
+        <option value="">Todos los tipos</option><option>Comprar</option><option>Apartar</option><option>Pregunta</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="lista" id="lista"></div>
+</Panel>
+
+<script>
+  import { obtener, guardar, insertarOActualizar, eliminar, buscarPorId, nuevoId, hoy, formatoQ, formatoFecha, escapar, type Solicitud, type EstadoSolicitud } from '../lib/datos';
+  import { aviso, confirmar } from '../lib/ui';
+  import { esAdmin } from '../lib/sesion';
+  import { portada, juegoPorId } from '../lib/juegos';
+
+  const lista = document.getElementById('lista')!;
+  const buscar = document.getElementById('buscar') as HTMLInputElement;
+  const filtroTipo = document.getElementById('filtro-tipo') as HTMLSelectElement;
+  let estado = '';
+  const iconos: Record<string, string> = { Comprar: '🛒', Apartar: '📌', Pregunta: '❓' };
+  const soloDigitos = (t: string) => t.replace(/\D/g, '');
+
+  function pintar() {
+    const todas = obtener('solicitudes');
+    const cuentas = obtener('cuentas');
+    const contar = (e: string) => String(todas.filter((x) => x.estado === e).length);
+    document.getElementById('c-todas')!.textContent = String(todas.length);
+    document.getElementById('c-nueva')!.textContent = contar('Nueva');
+    document.getElementById('c-contactado')!.textContent = contar('Contactado');
+    document.getElementById('c-cerrada')!.textContent = contar('Cerrada');
+
+    const texto = buscar.value.toLowerCase().trim();
+    const filas = todas
+      .map((s) => ({ s, a: cuentas.find((v) => v.id === s.cuentaId) }))
+      .filter(({ s, a }) =>
+        (!estado || s.estado === estado) &&
+        (!filtroTipo.value || s.tipo === filtroTipo.value) &&
+        (!texto || `${s.nombre} ${s.telefono} ${a?.titulo ?? ''} ${a?.codigo ?? ''} ${a ? juegoPorId(a.juego).nombre : ''}`.toLowerCase().includes(texto)))
+      .sort((x, y) => Number(y.s.estado === 'Nueva') - Number(x.s.estado === 'Nueva') || y.s.fecha.localeCompare(x.s.fecha));
+
+    lista.innerHTML = filas.length ? filas.map(({ s, a }) => `
+      <article class="tarjeta solicitud estado-${s.estado}">
+        <div class="sol-auto">
+          ${a ? portada(a.juego, 'mini') : ''}
+          <strong>${escapar(a ? a.titulo : 'Cuenta eliminada')}</strong>
+          <small>${escapar(a ? `${juegoPorId(a.juego).nombre} · ${a.codigo}` : '')}</small>
+          <span>${a ? formatoQ(a.precio) : ''}${a?.estado === 'Vendida' ? ' · <em>Vendida</em>' : ''}</span>
+        </div>
+        <div class="sol-cuerpo">
+          <div class="sol-cabecera">
+            <span class="tipo">${iconos[s.tipo] ?? ''} ${escapar(s.tipo)}</span>
+            <span class="fecha">${formatoFecha(s.fecha)}</span>
+          </div>
+          <h3>${escapar(s.nombre)}</h3>
+          <p class="contacto">📞 ${escapar(s.telefono)}${s.correo ? ` · ✉️ ${escapar(s.correo)}` : ''}</p>
+          ${s.mensaje ? `<p class="mensaje">“${escapar(s.mensaje)}”</p>` : ''}
+          <div class="sol-acciones">
+            <select class="control estado-select" data-estado-id="${s.id}">
+              ${(['Nueva', 'Contactado', 'Cerrada'] as EstadoSolicitud[]).map((e) => `<option ${e === s.estado ? 'selected' : ''}>${e}</option>`).join('')}
+            </select>
+            <a class="btn btn-secundario" href="https://wa.me/502${soloDigitos(s.telefono)}" target="_blank" rel="noopener">💬 WhatsApp</a>
+            <button class="btn btn-secundario" data-cliente="${s.id}">👤 Registrar cliente</button>
+            <button class="btn btn-icono peligro" data-eliminar="${s.id}" title="Eliminar" data-solo-admin>🗑️</button>
+          </div>
+        </div>
+      </article>`).join('')
+      : '<div class="tarjeta vacio">📭 No hay solicitudes con esos filtros.</div>';
+  }
+
+  // Tarjetas de resumen funcionan como filtro
+  document.querySelectorAll<HTMLButtonElement>('.mini').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('.mini').forEach((x) => x.classList.remove('activo'));
+    b.classList.add('activo');
+    estado = b.dataset.estado || '';
+    pintar();
+  }));
+
+  lista.addEventListener('change', (e) => {
+    const sel = e.target as HTMLSelectElement;
+    if (!sel.dataset.estadoId) return;
+    guardar('solicitudes', obtener('solicitudes').map((x) => (x.id === sel.dataset.estadoId ? { ...x, estado: sel.value as EstadoSolicitud } : x)));
+    aviso(`Solicitud marcada como ${sel.value.toLowerCase()}`);
+    pintar();
+  });
+
+  lista.addEventListener('click', async (e) => {
+    const boton = (e.target as HTMLElement).closest('button');
+    if (!boton) return;
+
+    if (boton.dataset.cliente) {
+      const s = buscarPorId('solicitudes', boton.dataset.cliente) as Solicitud | undefined;
+      if (!s) return;
+      const existe = obtener('clientes').some((c) => soloDigitos(c.telefono) === soloDigitos(s.telefono));
+      if (existe) return aviso('Ya existe un cliente con ese teléfono', 'info');
+      insertarOActualizar('clientes', {
+        id: nuevoId(), nombre: s.nombre, gamertag: '', nit: 'CF', telefono: s.telefono, correo: s.correo, creado: hoy(),
+      });
+      aviso(`${s.nombre} agregado a Clientes`);
+    }
+
+    if (boton.dataset.eliminar) {
+      if (!esAdmin()) return aviso('Solo un administrador puede eliminar', 'error');
+      const s = buscarPorId('solicitudes', boton.dataset.eliminar);
+      if (s && await confirmar('¿Eliminar solicitud?', `Se eliminará la solicitud de ${s.nombre}.`)) {
+        eliminar('solicitudes', s.id);
+        aviso('Solicitud eliminada');
+        pintar();
+      }
+    }
+  });
+
+  [buscar, filtroTipo].forEach((el) => el.addEventListener('input', pintar));
+  pintar();
+</script>
+
+<style>
+  .resumen { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.25rem; }
+  .mini { padding: 1rem 1.2rem; border-left: 4px solid var(--morado); color: var(--texto); text-align: left; cursor: pointer; font: inherit; transition: box-shadow .15s, transform .15s; }
+  .mini:hover { transform: translateY(-2px); }
+  .mini.activo { box-shadow: 0 0 0 2px var(--morado), 0 0 20px rgba(124,92,255,.3); }
+  .mini p { font-size: .8rem; color: var(--texto-suave); font-weight: 700; }
+  .mini strong { font-size: 1.4rem; font-family: var(--fuente-titulo); }
+  .mini.nueva { border-left-color: var(--rosa); }
+  .mini.contactado { border-left-color: var(--amarillo); }
+  .mini.cerrada { border-left-color: var(--verde); }
+  .barra { padding: 1rem; margin-bottom: 1.25rem; }
+
+  .lista { display: grid; gap: 1rem; }
+  .lista :global(.solicitud) { display: grid; grid-template-columns: 210px 1fr; overflow: hidden; border-left: 5px solid var(--borde); }
+  .lista :global(.estado-Nueva) { border-left-color: var(--rosa); }
+  .lista :global(.estado-Contactado) { border-left-color: var(--amarillo); }
+  .lista :global(.estado-Cerrada) { border-left-color: var(--verde); opacity: .7; }
+  .lista :global(.sol-auto) { padding: 1rem; background: #0f1322; display: grid; align-content: center; justify-items: center; gap: .25rem; text-align: center; font-size: .88rem; }
+  .lista :global(.sol-auto .portada-mini) { width: 64px; height: 64px; margin-bottom: .3rem; }
+  .lista :global(.sol-auto small) { color: var(--texto-suave); font-size: .74rem; }
+  .lista :global(.sol-auto span) { color: var(--verde); font-weight: 700; font-size: .82rem; }
+  .lista :global(.sol-cuerpo) { padding: 1rem 1.25rem; }
+  .lista :global(.sol-cabecera) { display: flex; justify-content: space-between; font-size: .8rem; }
+  .lista :global(.tipo) { font-weight: 700; color: #c4b8ff; }
+  .lista :global(.fecha) { color: var(--texto-suave); }
+  .lista :global(h3) { font-size: 1.1rem; margin-top: .2rem; }
+  .lista :global(.contacto) { font-size: .88rem; color: var(--texto-suave); }
+  .lista :global(.mensaje) { margin-top: .5rem; padding: .6rem .8rem; border-radius: 8px; background: #0f1322; border: 1px solid var(--borde); font-style: italic; color: #b8c0dc; font-size: .9rem; }
+  .lista :global(.sol-acciones) { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .9rem; align-items: center; }
+  .lista :global(.estado-select) { width: auto; }
+
+  @media (max-width: 900px) { .resumen { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 640px) { .lista :global(.solicitud) { grid-template-columns: 1fr; } }
+</style>

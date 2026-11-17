@@ -1,0 +1,203 @@
+---
+import '@fontsource/chakra-petch/600.css';
+import '@fontsource/chakra-petch/700.css';
+import '@fontsource-variable/exo-2';
+import '../styles/global.css';
+import { ruta } from '../lib/ruta';
+
+interface Props {
+  titulo: string;
+  activo: 'dashboard' | 'cuentas' | 'clientes' | 'ventas' | 'solicitudes';
+}
+const { titulo, activo } = Astro.props;
+
+const menu = [
+  { id: 'dashboard', texto: 'Dashboard', url: ruta('/dashboard'), icono: '<path d="M3 13h8V3H3zM13 21h8V11h-8zM3 21h8v-6H3zM13 3v6h8V3z"/>' },
+  { id: 'cuentas', texto: 'Cuentas', url: ruta('/cuentas'), icono: '<rect x="2" y="7" width="20" height="12" rx="4"/><path d="M7 11v4M5 13h4M15 12h.01M18 14h.01"/>' },
+  { id: 'clientes', texto: 'Clientes', url: ruta('/clientes'), icono: '<circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0M17 11a3 3 0 1 0 0-6M22 21a6 6 0 0 0-5-6"/>' },
+  { id: 'ventas', texto: 'Ventas', url: ruta('/ventas'), icono: '<path d="M12 2v20M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>' },
+  { id: 'solicitudes', texto: 'Solicitudes', url: ruta('/solicitudes'), icono: '<path d="M4 4h16v12H5.2L4 17.2z"/><path d="M8 9h8M8 12h5"/>' },
+];
+const urlLogin = ruta('/login');
+---
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{titulo} | GameVault GT</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎮</text></svg>" />
+
+    <!-- Protección: si no hay sesión, regresa al login antes de mostrar nada -->
+    <script is:inline define:vars={{ urlLogin }}>
+      const sesion = sessionStorage.getItem('gv_sesion') || localStorage.getItem('gv_sesion');
+      if (!sesion) {
+        location.replace(urlLogin);
+      } else {
+        try {
+          const u = JSON.parse(sesion);
+          if (u.rol !== 'Administrador') document.documentElement.classList.add('rol-vendedor');
+        } catch (e) { location.replace(urlLogin); }
+      }
+    </script>
+  </head>
+  <body>
+    <div class="panel">
+      <aside class="lateral" id="lateral">
+        <a href={ruta('/dashboard')} class="marca">
+          <span class="marca-icono">🎮</span>
+          <span>Game<strong>Vault</strong><small>Venta de cuentas</small></span>
+        </a>
+
+        <nav>
+          <p class="nav-titulo">Menú principal</p>
+          {menu.map((m) => (
+            <a href={m.url} class:list={['nav-enlace', { activo: activo === m.id }]}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" set:html={m.icono} />
+              {m.texto}
+              {m.id === 'solicitudes' && <span class="contador-nav" id="contador-solicitudes" hidden></span>}
+            </a>
+          ))}
+        </nav>
+
+        <div class="lateral-pie">
+          <a href={ruta('/')} class="nav-enlace" target="_blank">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
+            Ver tienda pública ↗
+          </a>
+          <button class="nav-enlace" id="btn-restablecer" data-solo-admin>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5"/></svg>
+            Restablecer datos
+          </button>
+          <div class="usuario">
+            <span class="avatar" id="avatar">A</span>
+            <div>
+              <p class="usuario-nombre" id="usuario-nombre">Usuario</p>
+              <p class="usuario-rol" id="usuario-rol">Rol</p>
+            </div>
+            <button class="salir" id="btn-salir" title="Cerrar sesión" aria-label="Cerrar sesión">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+            </button>
+          </div>
+        </div>
+      </aside>
+      <div class="fondo-movil" id="fondo-movil"></div>
+
+      <div class="principal">
+        <header class="superior">
+          <button class="btn-menu" id="btn-menu" aria-label="Abrir menú">☰</button>
+          <div>
+            <h1>{titulo}</h1>
+            <p class="fecha" id="fecha-hoy"></p>
+          </div>
+          <div class="superior-acciones">
+            <slot name="acciones" />
+          </div>
+        </header>
+        <main class="contenido">
+          <slot />
+        </main>
+      </div>
+    </div>
+
+    <script>
+      import { usuarioActual, cerrarSesion } from '../lib/sesion';
+      import { restablecerDatos, obtener } from '../lib/datos';
+      import { confirmar, aviso } from '../lib/ui';
+
+      const u = usuarioActual();
+      if (u) {
+        document.getElementById('usuario-nombre')!.textContent = u.nombre;
+        document.getElementById('usuario-rol')!.textContent = u.rol;
+        document.getElementById('avatar')!.textContent = u.nombre.charAt(0).toUpperCase();
+      }
+
+      // Número de solicitudes nuevas en el menú
+      const nuevas = obtener('solicitudes').filter((x) => x.estado === 'Nueva').length;
+      const contador = document.getElementById('contador-solicitudes');
+      if (contador && nuevas) { contador.hidden = false; contador.textContent = String(nuevas); }
+
+      const fecha = new Date().toLocaleDateString('es-GT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+      document.getElementById('fecha-hoy')!.textContent = fecha.charAt(0).toUpperCase() + fecha.slice(1);
+
+      document.getElementById('btn-salir')!.addEventListener('click', async () => {
+        if (await confirmar('¿Cerrar sesión?', 'Tendrás que volver a iniciar sesión para entrar.', 'Cerrar sesión')) cerrarSesion();
+      });
+
+      document.getElementById('btn-restablecer')!.addEventListener('click', async () => {
+        if (await confirmar('¿Restablecer datos?', 'Se borrarán todos los cambios y se cargarán los datos de ejemplo.', 'Restablecer')) {
+          restablecerDatos();
+          aviso('Datos restablecidos');
+          setTimeout(() => location.reload(), 600);
+        }
+      });
+
+      // Menú lateral en celular
+      const lateral = document.getElementById('lateral')!;
+      const fondo = document.getElementById('fondo-movil')!;
+      const alternar = () => { lateral.classList.toggle('abierto'); fondo.classList.toggle('visible'); };
+      document.getElementById('btn-menu')!.addEventListener('click', alternar);
+      fondo.addEventListener('click', alternar);
+    </script>
+
+    <style>
+      .panel { display: flex; min-height: 100vh; }
+
+      .lateral {
+        position: fixed; inset: 0 auto 0 0; width: 250px; z-index: 50;
+        display: flex; flex-direction: column;
+        background: #0e1222; border-right: 1px solid var(--borde); color: #cbd5e1;
+        padding: 1.25rem .9rem; transition: transform .25s;
+      }
+      .marca { display: flex; align-items: center; gap: .7rem; padding: .3rem .5rem 1.5rem; color: #fff; font-size: 1.2rem; font-family: var(--fuente-titulo); font-weight: 700; }
+      .marca strong { color: var(--celeste); }
+      .marca small { display: block; font-size: .7rem; color: #94a3b8; font-weight: 400; }
+      .marca-icono { width: 42px; height: 42px; border-radius: 10px; display: grid; place-items: center; background: var(--degradado); font-size: 1.3rem; box-shadow: 0 0 18px rgba(124,92,255,.5); }
+
+      .nav-titulo { font-size: .68rem; text-transform: uppercase; letter-spacing: .1em; color: #64748b; padding: 0 .75rem .5rem; }
+      nav { display: grid; gap: .2rem; }
+      .nav-enlace {
+        display: flex; align-items: center; gap: .75rem; width: 100%;
+        padding: .7rem .75rem; border-radius: 8px; border: none; background: none;
+        color: #cbd5e1; font-weight: 700; font-size: .92rem; cursor: pointer; text-align: left;
+        transition: background .15s, color .15s;
+      }
+      .nav-enlace svg { width: 19px; height: 19px; flex-shrink: 0; }
+      .nav-enlace:hover { background: rgba(255,255,255,.06); color: #fff; }
+      .nav-enlace.activo { background: var(--degradado); color: #fff; box-shadow: 0 6px 18px rgba(124,92,255,.4); }
+
+      .contador-nav { margin-left: auto; min-width: 22px; height: 22px; padding: 0 .4rem; border-radius: 999px; background: var(--rosa); box-shadow: 0 0 10px var(--rosa); color: #fff; font-size: .72rem; display: grid; place-items: center; }
+      .lateral-pie { margin-top: auto; display: grid; gap: .6rem; }
+      .usuario { display: flex; align-items: center; gap: .7rem; padding: .75rem; border-radius: 10px; background: rgba(255,255,255,.06); }
+      .avatar { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: var(--degradado); color: #fff; font-weight: 700; flex-shrink: 0; }
+      .usuario-nombre { color: #fff; font-weight: 700; font-size: .88rem; }
+      .usuario-rol { font-size: .75rem; color: #94a3b8; }
+      .salir { margin-left: auto; background: none; border: none; color: #94a3b8; cursor: pointer; padding: .3rem; border-radius: 6px; }
+      .salir:hover { color: #fff; background: rgba(255,255,255,.1); }
+
+      .principal { flex: 1; margin-left: 250px; min-width: 0; }
+      .superior {
+        position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 1rem;
+        padding: 1rem 1.75rem; background: rgba(11, 14, 26, .85); backdrop-filter: blur(8px);
+        border-bottom: 1px solid var(--borde);
+      }
+      .superior h1 { font-size: 1.35rem; }
+      .fecha { font-size: .82rem; color: var(--texto-suave); }
+      .superior-acciones { margin-left: auto; display: flex; gap: .5rem; }
+      .btn-menu { display: none; background: var(--panel); color: var(--texto); border: 1px solid var(--borde); border-radius: 8px; width: 40px; height: 40px; font-size: 1.2rem; cursor: pointer; }
+      .contenido { padding: 1.75rem; }
+
+      .fondo-movil { display: none; }
+      @media (max-width: 900px) {
+        .lateral { transform: translateX(-100%); }
+        .lateral.abierto { transform: none; }
+        .principal { margin-left: 0; }
+        .btn-menu { display: grid; place-items: center; }
+        .fondo-movil.visible { display: block; position: fixed; inset: 0; z-index: 40; background: rgba(5,7,15,.6); }
+        .superior { padding: .9rem 1rem; }
+        .contenido { padding: 1rem; }
+        .fecha { display: none; }
+      }
+    </style>
+  </body>
+</html>

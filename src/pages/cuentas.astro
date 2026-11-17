@@ -1,0 +1,207 @@
+---
+import Panel from '../layouts/Panel.astro';
+import { JUEGOS } from '../lib/juegos';
+---
+<Panel titulo="Cuentas" activo="cuentas">
+  <button slot="acciones" class="btn btn-primario" id="btn-nuevo">+ Agregar cuenta</button>
+
+  <div class="tarjeta barra-filtros">
+    <div class="herramientas">
+      <div class="buscador"><input class="control" id="buscar" placeholder="Buscar por título, código, rango o skin..." /></div>
+      <select class="control" id="filtro-juego">
+        <option value="">Todos los juegos</option>
+        {JUEGOS.map((j) => <option value={j.id}>{j.icono} {j.nombre}</option>)}
+      </select>
+      <select class="control" id="filtro-estado">
+        <option value="">Todos los estados</option><option>Disponible</option><option>Reservada</option><option>Vendida</option>
+      </select>
+      <select class="control" id="orden">
+        <option value="reciente">Más recientes</option>
+        <option value="precio-asc">Precio: menor a mayor</option>
+        <option value="precio-desc">Precio: mayor a menor</option>
+      </select>
+    </div>
+    <p class="contador" id="contador"></p>
+  </div>
+
+  <div class="rejilla" id="lista"></div>
+
+  <dialog class="modal" id="modal-cuenta">
+    <form id="form-cuenta" method="dialog">
+      <div class="modal-cabecera">
+        <h3 id="titulo-modal">Agregar cuenta</h3>
+        <button type="button" class="modal-cerrar" data-cerrar aria-label="Cerrar">×</button>
+      </div>
+      <div class="modal-cuerpo">
+        <input type="hidden" name="id" />
+        <div class="rejilla-form">
+          <div class="campo"><label>Juego *</label>
+            <select name="juego" required>{JUEGOS.map((j) => <option value={j.id}>{j.icono} {j.nombre}</option>)}</select>
+          </div>
+          <div class="campo"><label>Plataforma</label>
+            <select name="plataforma"><option>PC</option><option>PlayStation</option><option>Xbox</option><option>Nintendo Switch</option><option>Móvil</option><option>Multiplataforma</option></select>
+          </div>
+          <div class="campo completo"><label>Título *</label><input name="titulo" required placeholder="Ej. Cuenta OG con skins de temporada 2" /></div>
+          <div class="campo"><label>Nivel</label><input name="nivel" type="number" min="0" value="0" /></div>
+          <div class="campo"><label>Rango</label><input name="rango" placeholder="Ej. Diamante, Inmortal 2..." /></div>
+          <div class="campo"><label>Región</label>
+            <select name="region"><option>LATAM</option><option>NA</option><option>EU</option><option>Global</option></select>
+          </div>
+          <div class="campo"><label>Estado</label>
+            <select name="estado"><option>Disponible</option><option>Reservada</option><option>Vendida</option></select>
+          </div>
+          <div class="campo"><label>Precio (Q) *</label><input name="precio" type="number" min="0" step="10" required /></div>
+          <div class="campo"><label>Precio anterior (Q) <small>para mostrar oferta</small></label><input name="precioAnterior" type="number" min="0" step="10" value="0" /></div>
+          <div class="campo completo"><label>Lo que incluye <small>(uno por línea)</small></label><textarea name="extras" rows="4" placeholder={'Skin legendaria\n1,000 monedas\nPase de batalla'}></textarea></div>
+          <div class="campo completo"><label>Descripción (se ve en la tienda)</label><textarea name="descripcion" rows="2"></textarea></div>
+          <label class="check completo"><input type="checkbox" name="destacada" /> ⭐ Mostrar en "Destacadas" de la tienda</label>
+        </div>
+      </div>
+      <div class="modal-acciones">
+        <button type="button" class="btn btn-secundario" data-cerrar>Cancelar</button>
+        <button type="submit" class="btn btn-primario">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+</Panel>
+
+<script>
+  import { obtener, insertarOActualizar, eliminar, buscarPorId, nuevoId, hoy, formatoQ, escapar, porcentajeOferta, siguienteCodigo, type Cuenta } from '../lib/datos';
+  import { aviso, confirmar, prepararModal, leerFormulario, llenarFormulario } from '../lib/ui';
+  import { esAdmin } from '../lib/sesion';
+  import { portada, juegoPorId } from '../lib/juegos';
+  import { ruta } from '../lib/ruta';
+
+  const lista = document.getElementById('lista')!;
+  const buscar = document.getElementById('buscar') as HTMLInputElement;
+  const filtroJuego = document.getElementById('filtro-juego') as HTMLSelectElement;
+  const filtroEstado = document.getElementById('filtro-estado') as HTMLSelectElement;
+  const orden = document.getElementById('orden') as HTMLSelectElement;
+  const modal = prepararModal('modal-cuenta');
+  const form = document.getElementById('form-cuenta') as HTMLFormElement;
+  const destacada = form.elements.namedItem('destacada') as HTMLInputElement;
+
+  function pintar() {
+    const texto = buscar.value.toLowerCase().trim();
+    const cuentas = obtener('cuentas').filter((c) =>
+      (!filtroJuego.value || c.juego === filtroJuego.value) &&
+      (!filtroEstado.value || c.estado === filtroEstado.value) &&
+      (!texto || `${c.titulo} ${c.codigo} ${c.rango} ${c.extras.join(' ')}`.toLowerCase().includes(texto)));
+    if (orden.value === 'reciente') cuentas.sort((a, b) => b.creado.localeCompare(a.creado));
+    if (orden.value === 'precio-asc') cuentas.sort((a, b) => a.precio - b.precio);
+    if (orden.value === 'precio-desc') cuentas.sort((a, b) => b.precio - a.precio);
+
+    document.getElementById('contador')!.textContent = `${cuentas.length} cuenta${cuentas.length === 1 ? '' : 's'}`;
+    lista.innerHTML = cuentas.length ? cuentas.map((c) => {
+      const pct = porcentajeOferta(c);
+      return `
+      <article class="tarjeta item">
+        <div class="item-portada">${portada(c.juego)}
+          <span class="insignia ${c.estado}">${c.estado}</span>
+          ${c.destacada ? '<span class="estrella" title="Destacada">⭐</span>' : ''}
+        </div>
+        <div class="item-cuerpo">
+          <p class="item-meta">${escapar(c.codigo)} · ${escapar(c.plataforma)} · ${escapar(c.region)}</p>
+          <h3>${escapar(c.titulo)}</h3>
+          <p class="item-rango">${c.nivel ? `Nv. ${c.nivel} · ` : ''}${escapar(c.rango || '—')}</p>
+          <p class="item-precio">${formatoQ(c.precio)}${pct ? ` <span class="pct">-${pct}%</span>` : ''}</p>
+          <div class="item-pie">
+            <span class="juego-nombre">${juegoPorId(c.juego).icono} ${escapar(juegoPorId(c.juego).nombre)}</span>
+            <div class="acciones-fila">
+              ${c.estado !== 'Vendida' ? `<a class="btn btn-icono" href="${ruta('/cuenta')}?id=${c.id}" target="_blank" title="Ver en la tienda">🌐</a>` : ''}
+              <button class="btn btn-icono" data-editar="${c.id}" title="Editar">✏️</button>
+              <button class="btn btn-icono peligro" data-eliminar="${c.id}" title="Eliminar" data-solo-admin>🗑️</button>
+            </div>
+          </div>
+        </div>
+      </article>`;
+    }).join('') : '<div class="tarjeta vacio completo">👾 No se encontraron cuentas.</div>';
+  }
+
+  function abrir(c?: Cuenta) {
+    form.reset();
+    document.getElementById('titulo-modal')!.textContent = c ? `Editar cuenta ${c.codigo}` : 'Agregar cuenta';
+    if (c) {
+      llenarFormulario(form, { ...c, extras: c.extras.join('\n') } as unknown as Record<string, unknown>);
+      destacada.checked = c.destacada;
+    } else {
+      llenarFormulario(form, { id: '', nivel: 0, precioAnterior: 0 });
+    }
+    modal.showModal();
+  }
+
+  document.getElementById('btn-nuevo')!.addEventListener('click', () => abrir());
+
+  lista.addEventListener('click', async (e) => {
+    const b = (e.target as HTMLElement).closest('button');
+    if (!b) return;
+    if (b.dataset.editar) abrir(buscarPorId('cuentas', b.dataset.editar));
+    if (b.dataset.eliminar) {
+      if (!esAdmin()) return aviso('Solo un administrador puede eliminar', 'error');
+      const c = buscarPorId('cuentas', b.dataset.eliminar);
+      if (!c) return;
+      if (obtener('ventas').some((v) => v.cuentaId === c.id && v.estado === 'Completada')) return aviso('No se puede eliminar: la cuenta tiene una venta registrada', 'error');
+      if (await confirmar('¿Eliminar cuenta?', `Se eliminará ${c.codigo}: ${c.titulo}.`)) {
+        eliminar('cuentas', c.id);
+        aviso('Cuenta eliminada');
+        pintar();
+      }
+    }
+  });
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (!form.reportValidity()) return;
+    const d = leerFormulario(form);
+    const anterior = d.id ? buscarPorId('cuentas', d.id) : undefined;
+    const cuenta: Cuenta = {
+      id: d.id || nuevoId(),
+      codigo: anterior?.codigo ?? siguienteCodigo(d.juego),
+      juego: d.juego,
+      titulo: d.titulo.trim(),
+      plataforma: d.plataforma as Cuenta['plataforma'],
+      region: d.region as Cuenta['region'],
+      nivel: Number(d.nivel) || 0,
+      rango: d.rango.trim(),
+      extras: d.extras.split('\n').map((x) => x.trim()).filter(Boolean),
+      precio: Number(d.precio),
+      precioAnterior: Number(d.precioAnterior) || 0,
+      estado: d.estado as Cuenta['estado'],
+      destacada: destacada.checked,
+      descripcion: d.descripcion.trim(),
+      creado: anterior?.creado ?? hoy(),
+    };
+    insertarOActualizar('cuentas', cuenta);
+    modal.close();
+    aviso(anterior ? 'Cuenta actualizada' : `Cuenta ${cuenta.codigo} agregada`);
+    pintar();
+  });
+
+  [buscar, filtroJuego, filtroEstado, orden].forEach((el) => el.addEventListener('input', pintar));
+  pintar();
+</script>
+
+<style>
+  .barra-filtros { padding: 1rem; margin-bottom: 1.25rem; }
+  .contador { font-size: .82rem; color: var(--texto-suave); margin-top: .6rem; }
+  .rejilla { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1.25rem; }
+  .rejilla :global(.completo) { grid-column: 1 / -1; }
+  .rejilla :global(.item) { overflow: hidden; transition: transform .2s, border-color .2s; }
+  .rejilla :global(.item:hover) { transform: translateY(-3px); border-color: var(--morado); }
+  .rejilla :global(.item-portada) { position: relative; }
+  .rejilla :global(.item-portada .portada) { height: 120px; }
+  .rejilla :global(.item-portada .insignia) { position: absolute; top: .7rem; left: .7rem; z-index: 2; background: rgba(11,14,26,.8); }
+  .rejilla :global(.estrella) { position: absolute; top: .6rem; right: .7rem; z-index: 2; font-size: 1.1rem; }
+  .rejilla :global(.item-cuerpo) { padding: 1rem 1.1rem; }
+  .rejilla :global(.item-meta) { font-size: .74rem; color: var(--texto-suave); font-family: Consolas, monospace; }
+  .rejilla :global(h3) { font-size: 1.02rem; margin: .2rem 0; }
+  .rejilla :global(.item-rango) { font-size: .82rem; color: var(--celeste); }
+  .rejilla :global(.item-precio) { font-family: var(--fuente-titulo); font-size: 1.25rem; font-weight: 700; color: var(--verde); margin: .4rem 0 .8rem; }
+  .rejilla :global(.pct) { font-size: .75rem; padding: .1rem .4rem; border-radius: 6px; background: rgba(255,79,163,.15); color: var(--rosa); }
+  .rejilla :global(.item-pie) { display: flex; justify-content: space-between; align-items: center; padding-top: .8rem; border-top: 1px solid var(--borde); }
+  .rejilla :global(.juego-nombre) { font-size: .8rem; color: var(--texto-suave); }
+
+  .campo label small { font-weight: 400; color: var(--texto-suave); }
+  .check { display: flex; align-items: center; gap: .5rem; font-weight: 700; font-size: .9rem; cursor: pointer; }
+  .check input { accent-color: var(--morado); width: 18px; height: 18px; }
+</style>

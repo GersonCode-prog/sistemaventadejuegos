@@ -1,0 +1,190 @@
+---
+import '@fontsource/chakra-petch/600.css';
+import '@fontsource/chakra-petch/700.css';
+import '@fontsource-variable/exo-2';
+import '../styles/global.css';
+import { ruta } from '../lib/ruta';
+import { JUEGOS } from '../lib/juegos';
+const destinoPanel = ruta('/dashboard');
+---
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Iniciar sesión | GameVault GT</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎮</text></svg>" />
+    <!-- Si ya hay sesión, entra directo al sistema -->
+    <script is:inline define:vars={{ destinoPanel }}>
+      if (sessionStorage.getItem('gv_sesion') || localStorage.getItem('gv_sesion')) location.replace(destinoPanel);
+    </script>
+  </head>
+  <body>
+    <div class="login">
+      <section class="lado-marca">
+        <div class="marca">
+          <span class="marca-icono">🎮</span>
+          <span>Game<strong>Vault</strong> GT</span>
+        </div>
+
+        <div class="presentacion">
+          <h1>Tu tienda de cuentas, <span>bajo control</span></h1>
+          <p>Inventario, clientes, ventas y entregas en un solo panel.</p>
+        </div>
+
+        <div class="mosaico">
+          {JUEGOS.slice(0, 8).map((j, i) => (
+            <span class="ficha-juego" style={`--c1:${j.color1};--c2:${j.color2};--d:${i * 0.3}s`} title={j.nombre}>{j.icono}</span>
+          ))}
+        </div>
+
+        <ul class="beneficios">
+          <li><span>✓</span> Inventario de cuentas por juego</li>
+          <li><span>✓</span> Ventas con control de entrega</li>
+          <li><span>✓</span> Solicitudes de la tienda en tiempo real</li>
+        </ul>
+      </section>
+
+      <section class="lado-form">
+        <a href={ruta('/')} class="volver-sitio">← Volver a la tienda</a>
+        <form id="form-login" class="tarjeta formulario" novalidate>
+          <h2>Bienvenido 👋</h2>
+          <p class="subtitulo">Ingresa tus credenciales para continuar</p>
+
+          <div class="campo">
+            <label for="usuario">Usuario</label>
+            <input id="usuario" name="usuario" autocomplete="username" placeholder="admin" required autofocus />
+          </div>
+
+          <div class="campo">
+            <label for="clave">Contraseña</label>
+            <div class="con-ojo">
+              <input id="clave" name="clave" type="password" autocomplete="current-password" placeholder="•••••" required />
+              <button type="button" id="ver-clave" aria-label="Mostrar contraseña">👁</button>
+            </div>
+          </div>
+
+          <label class="recordar"><input type="checkbox" name="recordar" /> Recordarme en este equipo</label>
+
+          <p class="error" id="error" role="alert"></p>
+
+          <button type="submit" class="btn btn-primario entrar" id="btn-entrar">Iniciar sesión</button>
+
+          <div class="demo">
+            <p><strong>Usuarios de prueba</strong></p>
+            <button type="button" class="demo-usuario" data-u="admin">👑 <b>admin</b> / 12345 <small>Administrador</small></button>
+            <button type="button" class="demo-usuario" data-u="vendedor">🕹️ <b>vendedor</b> / 12345 <small>Vendedor</small></button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <script>
+      import { iniciarSesion } from '../lib/sesion';
+      import { ruta } from '../lib/ruta';
+
+      const form = document.getElementById('form-login') as HTMLFormElement;
+      const error = document.getElementById('error')!;
+      const boton = document.getElementById('btn-entrar') as HTMLButtonElement;
+      const clave = document.getElementById('clave') as HTMLInputElement;
+
+      document.getElementById('ver-clave')!.addEventListener('click', () => {
+        clave.type = clave.type === 'password' ? 'text' : 'password';
+      });
+
+      // Botones de usuarios de prueba: llenan el formulario
+      document.querySelectorAll<HTMLButtonElement>('.demo-usuario').forEach((b) => {
+        b.addEventListener('click', () => {
+          (form.elements.namedItem('usuario') as HTMLInputElement).value = b.dataset.u!;
+          clave.value = '12345';
+          error.textContent = '';
+        });
+      });
+
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const datos = new FormData(form);
+        const usuario = String(datos.get('usuario') || '');
+        const contrasena = String(datos.get('clave') || '');
+
+        if (!usuario || !contrasena) {
+          error.textContent = 'Escribe tu usuario y contraseña.';
+          return;
+        }
+
+        boton.disabled = true;
+        boton.textContent = 'Verificando...';
+
+        // Pequeña espera para simular la consulta al servidor
+        setTimeout(() => {
+          const u = iniciarSesion(usuario, contrasena, datos.get('recordar') === 'on');
+          if (u) {
+            boton.textContent = '✓ Bienvenido';
+            location.replace(ruta('/dashboard'));
+          } else {
+            error.textContent = 'Usuario o contraseña incorrectos.';
+            form.classList.remove('sacudir');
+            void form.offsetWidth;
+            form.classList.add('sacudir');
+            boton.disabled = false;
+            boton.textContent = 'Iniciar sesión';
+          }
+        }, 500);
+      });
+    </script>
+
+    <style>
+      .login { display: grid; grid-template-columns: 1.1fr 1fr; min-height: 100vh; }
+
+      .lado-marca {
+        position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 2rem;
+        padding: 2.5rem 3rem; color: #fff;
+        background: radial-gradient(circle at 80% 10%, rgba(25,175,225,.3), transparent 45%),
+                    radial-gradient(circle at 10% 90%, rgba(124,92,255,.45), transparent 50%), #0e1222;
+        border-right: 1px solid var(--borde);
+      }
+      .marca { display: flex; align-items: center; gap: .7rem; font-size: 1.3rem; font-family: var(--fuente-titulo); font-weight: 700; }
+      .marca strong { color: var(--celeste); }
+      .marca-icono { width: 44px; height: 44px; border-radius: 10px; display: grid; place-items: center; background: var(--degradado); font-size: 1.4rem; box-shadow: 0 0 20px rgba(124,92,255,.5); }
+      .presentacion { margin-top: auto; }
+      .presentacion h1 { font-size: clamp(1.8rem, 3vw, 2.6rem); max-width: 480px; margin-bottom: .6rem; }
+      .presentacion h1 span { background: var(--degradado); -webkit-background-clip: text; background-clip: text; color: transparent; }
+      .presentacion p { color: var(--texto-suave); font-size: 1.1rem; }
+      .mosaico { display: grid; grid-template-columns: repeat(4, 72px); gap: .9rem; }
+      .ficha-juego { width: 72px; height: 72px; border-radius: 16px; display: grid; place-items: center; font-size: 2rem; background: linear-gradient(135deg, var(--c1), var(--c2)); box-shadow: 0 10px 25px rgba(0,0,0,.4); animation: flotar 3.5s ease-in-out infinite; animation-delay: var(--d); }
+      @keyframes flotar { 50% { transform: translateY(-8px); } }
+      .beneficios { list-style: none; display: grid; gap: .6rem; margin-bottom: auto; }
+      .beneficios li { display: flex; align-items: center; gap: .6rem; color: #cfd5ee; }
+      .beneficios span { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--verde); color: #0b0e1a; font-size: .75rem; font-weight: 700; }
+
+      .lado-form { position: relative; display: grid; place-items: center; padding: 3.5rem 1.25rem 2rem; }
+      .volver-sitio { position: absolute; top: 1.25rem; right: 1.5rem; font-weight: 700; font-size: .9rem; color: var(--texto-suave); }
+      .volver-sitio:hover { color: var(--texto); }
+      .formulario { width: min(420px, 100%); padding: 2.25rem; display: grid; gap: 1.1rem; }
+      .formulario h2 { font-size: 1.6rem; }
+      .subtitulo { color: var(--texto-suave); margin-top: -.8rem; }
+      .con-ojo { position: relative; }
+      .con-ojo input { padding-right: 2.6rem; }
+      .con-ojo button { position: absolute; right: .5rem; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; font-size: 1rem; opacity: .6; }
+      .recordar { display: flex; align-items: center; gap: .5rem; font-size: .88rem; color: var(--texto-suave); cursor: pointer; }
+      .error { color: var(--rojo); font-size: .88rem; font-weight: 700; min-height: 1.2em; margin: -.4rem 0; }
+      .entrar { padding: .8rem; font-size: 1rem; }
+      .entrar:disabled { opacity: .7; cursor: wait; }
+
+      .demo { border-top: 1px dashed var(--borde); padding-top: 1rem; display: grid; gap: .45rem; font-size: .85rem; color: var(--texto-suave); }
+      .demo-usuario { display: flex; align-items: center; gap: .4rem; padding: .55rem .75rem; border: 1px solid var(--borde); border-radius: 8px; background: #0f1322; color: var(--texto); cursor: pointer; text-align: left; }
+      .demo-usuario:hover { border-color: var(--morado); background: rgba(124,92,255,.1); }
+      .demo-usuario small { margin-left: auto; color: var(--texto-suave); }
+
+      .sacudir { animation: sacudir .4s; }
+      @keyframes sacudir { 20%, 60% { transform: translateX(-8px); } 40%, 80% { transform: translateX(8px); } }
+
+      @media (max-width: 860px) {
+        .login { grid-template-columns: 1fr; }
+        .lado-marca { padding: 1.5rem; gap: 1rem; }
+        .mosaico, .beneficios { display: none; }
+        .presentacion { margin-top: .5rem; }
+      }
+    </style>
+  </body>
+</html>

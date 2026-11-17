@@ -1,0 +1,147 @@
+---
+import Panel from '../layouts/Panel.astro';
+---
+<Panel titulo="Clientes" activo="clientes">
+  <button slot="acciones" class="btn btn-primario" id="btn-nuevo">+ Agregar cliente</button>
+
+  <div class="tarjeta">
+    <div class="tarjeta-cabecera">
+      <div class="herramientas" style="flex:1">
+        <div class="buscador"><input class="control" id="buscar" placeholder="Buscar por nombre, gamertag, teléfono o correo..." /></div>
+      </div>
+      <span class="contador" id="contador"></span>
+    </div>
+    <div class="tabla-scroll">
+      <table>
+        <thead>
+          <tr><th>Cliente</th><th>Gamertag</th><th>Teléfono</th><th>NIT</th><th>Compras</th><th></th></tr>
+        </thead>
+        <tbody id="tabla"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <dialog class="modal" id="modal-cliente">
+    <form id="form-cliente" method="dialog">
+      <div class="modal-cabecera">
+        <h3 id="titulo-modal">Agregar cliente</h3>
+        <button type="button" class="modal-cerrar" data-cerrar aria-label="Cerrar">×</button>
+      </div>
+      <div class="modal-cuerpo">
+        <input type="hidden" name="id" />
+        <div class="rejilla-form">
+          <div class="campo completo"><label>Nombre completo *</label><input name="nombre" required placeholder="Nombre y apellido" /></div>
+          <div class="campo"><label>Gamertag</label><input name="gamertag" placeholder="Ej. ProPlayer_GT" /></div>
+          <div class="campo"><label>NIT</label><input name="nit" placeholder="1234567-8 o CF" /></div>
+          <div class="campo"><label>Teléfono / WhatsApp *</label><input name="telefono" required placeholder="5555-5555" pattern="[0-9\-\s+]{8,}" title="Al menos 8 dígitos" /></div>
+          <div class="campo"><label>Correo</label><input name="correo" type="email" placeholder="cliente@correo.com" /></div>
+        </div>
+      </div>
+      <div class="modal-acciones">
+        <button type="button" class="btn btn-secundario" data-cerrar>Cancelar</button>
+        <button type="submit" class="btn btn-primario">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+</Panel>
+
+<script>
+  import { obtener, insertarOActualizar, eliminar, buscarPorId, nuevoId, hoy, escapar, type Cliente } from '../lib/datos';
+  import { aviso, confirmar, prepararModal, leerFormulario, llenarFormulario } from '../lib/ui';
+  import { esAdmin } from '../lib/sesion';
+
+  const tabla = document.getElementById('tabla')!;
+  const buscar = document.getElementById('buscar') as HTMLInputElement;
+  const modal = prepararModal('modal-cliente');
+  const form = document.getElementById('form-cliente') as HTMLFormElement;
+
+  const iniciales = (n: string) => n.split(' ').filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase();
+  const colores = ['#7c5cff', '#19afe1', '#22b98a', '#e0a400', '#ff4fa3', '#ff7a18'];
+
+  function pintar() {
+    const texto = buscar.value.toLowerCase().trim();
+    const ventas = obtener('ventas').filter((v) => v.estado === 'Completada');
+    const clientes = obtener('clientes').filter((c) =>
+      !texto || `${c.nombre} ${c.gamertag} ${c.telefono} ${c.correo}`.toLowerCase().includes(texto));
+
+    document.getElementById('contador')!.textContent = `${clientes.length} cliente${clientes.length === 1 ? '' : 's'}`;
+
+    tabla.innerHTML = clientes.length ? clientes.map((c, i) => {
+      const compras = ventas.filter((v) => v.clienteId === c.id).length;
+      return `<tr>
+        <td><div class="persona">
+          <span class="iniciales" style="background:${colores[i % colores.length]}">${escapar(iniciales(c.nombre))}</span>
+          <div><strong>${escapar(c.nombre)}</strong><small>${escapar(c.correo || 'Sin correo')}</small></div>
+        </div></td>
+        <td>${c.gamertag ? `<span class="gamertag">🎮 ${escapar(c.gamertag)}</span>` : '<span class="sin">—</span>'}</td>
+        <td>${escapar(c.telefono)}</td>
+        <td>${escapar(c.nit || 'CF')}</td>
+        <td>${compras ? `<span class="insignia Vendido">${compras} compra${compras === 1 ? '' : 's'}</span>` : '<span class="sin">—</span>'}</td>
+        <td><div class="acciones-fila">
+          <button class="btn btn-icono" data-editar="${c.id}" title="Editar">✏️</button>
+          <button class="btn btn-icono peligro" data-eliminar="${c.id}" title="Eliminar" data-solo-admin>🗑️</button>
+        </div></td>
+      </tr>`;
+    }).join('') : '<tr><td colspan="6" class="vacio">🔍 No se encontraron clientes.</td></tr>';
+  }
+
+  function abrir(c?: Cliente) {
+    form.reset();
+    document.getElementById('titulo-modal')!.textContent = c ? 'Editar cliente' : 'Agregar cliente';
+    llenarFormulario(form, (c ?? { id: '' }) as unknown as Record<string, unknown>);
+    modal.showModal();
+  }
+
+  document.getElementById('btn-nuevo')!.addEventListener('click', () => abrir());
+
+  tabla.addEventListener('click', async (e) => {
+    const boton = (e.target as HTMLElement).closest('button');
+    if (!boton) return;
+    if (boton.dataset.editar) abrir(buscarPorId('clientes', boton.dataset.editar));
+    if (boton.dataset.eliminar) {
+      if (!esAdmin()) return aviso('Solo un administrador puede eliminar', 'error');
+      const c = buscarPorId('clientes', boton.dataset.eliminar);
+      if (!c) return;
+      if (obtener('ventas').some((v) => v.clienteId === c.id)) {
+        return aviso('No se puede eliminar: el cliente tiene ventas registradas', 'error');
+      }
+      if (await confirmar('¿Eliminar cliente?', `Se eliminará a ${c.nombre}.`)) {
+        eliminar('clientes', c.id);
+        aviso('Cliente eliminado');
+        pintar();
+      }
+    }
+  });
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (!form.reportValidity()) return;
+    const d = leerFormulario(form);
+    const anterior = d.id ? buscarPorId('clientes', d.id) : undefined;
+    const cliente: Cliente = {
+      id: d.id || nuevoId(),
+      nombre: d.nombre.trim(),
+      gamertag: d.gamertag.trim(),
+      nit: d.nit.trim().toUpperCase() || 'CF',
+      telefono: d.telefono.trim(),
+      correo: d.correo.trim(),
+      creado: anterior?.creado ?? hoy(),
+    };
+    insertarOActualizar('clientes', cliente);
+    modal.close();
+    aviso(anterior ? 'Cliente actualizado' : 'Cliente agregado');
+    pintar();
+  });
+
+  buscar.addEventListener('input', pintar);
+  pintar();
+</script>
+
+<style>
+  .contador { font-size: .82rem; color: var(--texto-suave); white-space: nowrap; }
+  #tabla :global(.persona) { display: flex; align-items: center; gap: .75rem; }
+  #tabla :global(.persona small) { display: block; color: var(--texto-suave); font-size: .78rem; }
+  #tabla :global(.iniciales) { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 700; font-size: .85rem; flex-shrink: 0; }
+  #tabla :global(.gamertag) { font-family: Consolas, monospace; font-size: .85rem; padding: .15rem .5rem; border-radius: 6px; background: var(--panel-2); border: 1px solid var(--borde); }
+  #tabla :global(.sin) { color: #475069; }
+</style>

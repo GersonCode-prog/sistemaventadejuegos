@@ -1,0 +1,166 @@
+---
+import Panel from '../layouts/Panel.astro';
+import { ruta } from '../lib/ruta';
+---
+<Panel titulo="Dashboard" activo="dashboard">
+  <a slot="acciones" href={ruta('/ventas?nueva=1')} class="btn btn-primario">+ Nueva venta</a>
+
+  <section class="kpis">
+    <div class="tarjeta kpi morado"><span class="kpi-icono">🎮</span><div><p class="kpi-titulo">Cuentas disponibles</p><p class="kpi-valor" id="kpi-disponibles">0</p><p class="kpi-nota" id="kpi-inventario"></p></div></div>
+    <div class="tarjeta kpi verde"><span class="kpi-icono">💰</span><div><p class="kpi-titulo">Ingresos del mes</p><p class="kpi-valor" id="kpi-ingresos-mes">Q 0</p><p class="kpi-nota" id="kpi-ventas-mes"></p></div></div>
+    <div class="tarjeta kpi celeste"><span class="kpi-icono">📈</span><div><p class="kpi-titulo">Ingresos totales</p><p class="kpi-valor" id="kpi-ingresos">Q 0</p><p class="kpi-nota" id="kpi-ventas"></p></div></div>
+    <div class="tarjeta kpi rosa"><span class="kpi-icono">📦</span><div><p class="kpi-titulo">Entregas pendientes</p><p class="kpi-valor" id="kpi-pendientes">0</p><p class="kpi-nota" id="kpi-solicitudes"></p></div></div>
+  </section>
+
+  <section class="fila">
+    <div class="tarjeta">
+      <div class="tarjeta-cabecera"><h2>Ventas de los últimos 6 meses</h2><span class="kpi-nota">en quetzales</span></div>
+      <div class="tarjeta-cuerpo"><div class="barras" id="grafica-meses"></div></div>
+    </div>
+    <div class="tarjeta">
+      <div class="tarjeta-cabecera"><h2>Estado del inventario</h2></div>
+      <div class="tarjeta-cuerpo">
+        <div class="dona-contenedor">
+          <div class="dona" id="dona"><div class="dona-centro"><strong id="dona-total">0</strong><span>cuentas</span></div></div>
+          <ul class="leyenda" id="leyenda-estados"></ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="fila">
+    <div class="tarjeta">
+      <div class="tarjeta-cabecera"><h2>Últimas ventas</h2><a href={ruta('/ventas')} class="ver-todo">Ver todas →</a></div>
+      <div class="tabla-scroll">
+        <table>
+          <thead><tr><th>Folio</th><th>Cuenta</th><th>Cliente</th><th>Total</th><th>Entrega</th></tr></thead>
+          <tbody id="ultimas-ventas"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="tarjeta">
+      <div class="tarjeta-cabecera"><h2>Inventario por juego</h2></div>
+      <div class="tarjeta-cuerpo"><ul class="por-juego" id="por-juego"></ul></div>
+    </div>
+  </section>
+</Panel>
+
+<script>
+  import { obtener, formatoQ, formatoQCorto, escapar } from '../lib/datos';
+  import { juegoPorId, portada } from '../lib/juegos';
+
+  const cuentas = obtener('cuentas');
+  const clientes = obtener('clientes');
+  const ventas = obtener('ventas').filter((v) => v.estado === 'Completada');
+  const solicitudes = obtener('solicitudes');
+
+  const mesActual = new Date().toLocaleDateString('en-CA').slice(0, 7);
+  const ventasMes = ventas.filter((v) => v.fecha.startsWith(mesActual));
+  const suma = (l: typeof ventas) => l.reduce((t, v) => t + v.total, 0);
+  const plural = (n: number, s: string, p: string) => `${n} ${n === 1 ? s : p}`;
+  const poner = (id: string, t: string) => { document.getElementById(id)!.textContent = t; };
+
+  poner('kpi-disponibles', String(cuentas.filter((c) => c.estado === 'Disponible').length));
+  poner('kpi-inventario', `de ${plural(cuentas.length, 'cuenta', 'cuentas')} registradas`);
+  poner('kpi-ingresos-mes', formatoQCorto(suma(ventasMes)));
+  poner('kpi-ventas-mes', plural(ventasMes.length, 'venta este mes', 'ventas este mes'));
+  poner('kpi-ingresos', formatoQCorto(suma(ventas)));
+  poner('kpi-ventas', plural(ventas.length, 'venta registrada', 'ventas registradas'));
+  poner('kpi-pendientes', String(ventas.filter((v) => v.entrega === 'Pendiente').length));
+  poner('kpi-solicitudes', plural(solicitudes.filter((s) => s.estado === 'Nueva').length, 'solicitud nueva', 'solicitudes nuevas'));
+
+  // Barras: últimos 6 meses
+  const meses = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - (5 - i));
+    return { clave: d.toLocaleDateString('en-CA').slice(0, 7), nombre: d.toLocaleDateString('es-GT', { month: 'short' }) };
+  });
+  const totales = meses.map((m) => suma(ventas.filter((v) => v.fecha.startsWith(m.clave))));
+  const maximo = Math.max(...totales, 1);
+  document.getElementById('grafica-meses')!.innerHTML = meses.map((m, i) => `
+    <div class="barra-col">
+      <span class="barra-valor">${totales[i] ? formatoQCorto(totales[i]) : ''}</span>
+      <div class="barra" style="height:${Math.max((totales[i] / maximo) * 100, 2)}%" title="${formatoQ(totales[i])}"></div>
+      <span class="barra-mes">${m.nombre}</span>
+    </div>`).join('');
+
+  // Dona
+  const estados = [
+    { nombre: 'Disponible', color: '#22e3a2' },
+    { nombre: 'Reservada', color: '#ffc94d' },
+    { nombre: 'Vendida', color: '#7c5cff' },
+  ].map((e) => ({ ...e, cantidad: cuentas.filter((c) => c.estado === e.nombre).length }));
+  let acumulado = 0;
+  const total = Math.max(cuentas.length, 1);
+  const segmentos = estados.map((e) => { const d = acumulado / total * 100; acumulado += e.cantidad; return `${e.color} ${d}% ${acumulado / total * 100}%`; });
+  document.getElementById('dona')!.style.background = cuentas.length ? `conic-gradient(${segmentos.join(', ')})` : '#262d47';
+  poner('dona-total', String(cuentas.length));
+  document.getElementById('leyenda-estados')!.innerHTML = estados.map((e) =>
+    `<li><span class="punto" style="background:${e.color}"></span>${e.nombre}<strong>${e.cantidad}</strong></li>`).join('');
+
+  // Últimas ventas
+  const ultimas = [...ventas].sort((a, b) => b.fecha.localeCompare(a.fecha)).slice(0, 5);
+  document.getElementById('ultimas-ventas')!.innerHTML = ultimas.length ? ultimas.map((v) => {
+    const c = cuentas.find((x) => x.id === v.cuentaId);
+    const cl = clientes.find((x) => x.id === v.clienteId);
+    return `<tr>
+      <td><strong>${escapar(v.folio)}</strong></td>
+      <td><div class="con-portada">${c ? portada(c.juego, 'mini') : ''}<span>${escapar(c?.titulo ?? '—')}<small>${escapar(c ? juegoPorId(c.juego).nombre : '')}</small></span></div></td>
+      <td>${escapar(cl?.nombre ?? '—')}</td>
+      <td><strong>${formatoQ(v.total)}</strong></td>
+      <td><span class="insignia ${v.entrega}">${v.entrega}</span></td></tr>`;
+  }).join('') : '<tr><td colspan="5" class="vacio">Aún no hay ventas</td></tr>';
+
+  // Inventario por juego (sin vendidas)
+  const porJuego: Record<string, number> = {};
+  cuentas.filter((c) => c.estado !== 'Vendida').forEach((c) => { porJuego[c.juego] = (porJuego[c.juego] || 0) + 1; });
+  const lista = Object.entries(porJuego).sort((a, b) => b[1] - a[1]);
+  const maxJ = Math.max(...lista.map((x) => x[1]), 1);
+  document.getElementById('por-juego')!.innerHTML = lista.length ? lista.map(([id, n]) => {
+    const j = juegoPorId(id);
+    return `<li><div class="fila-juego"><span>${j.icono} ${escapar(j.nombre)}</span><strong>${n}</strong></div>
+      <div class="pista"><div style="width:${n / maxJ * 100}%;background:linear-gradient(90deg,${j.color1},${j.color2})"></div></div></li>`;
+  }).join('') : '<li class="vacio">Sin cuentas en inventario</li>';
+</script>
+
+<style>
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.1rem; margin-bottom: 1.25rem; }
+  .kpi { display: flex; gap: 1rem; align-items: center; padding: 1.25rem; position: relative; overflow: hidden; }
+  .kpi::after { content: ''; position: absolute; right: -30px; top: -30px; width: 110px; height: 110px; border-radius: 50%; background: var(--c); opacity: .12; filter: blur(10px); }
+  .kpi.morado { --c: var(--morado); } .kpi.verde { --c: var(--verde); } .kpi.celeste { --c: var(--celeste); } .kpi.rosa { --c: var(--rosa); }
+  .kpi-icono { width: 52px; height: 52px; border-radius: 14px; display: grid; place-items: center; font-size: 1.5rem; flex-shrink: 0; background: color-mix(in srgb, var(--c) 18%, transparent); border: 1px solid color-mix(in srgb, var(--c) 40%, transparent); }
+  .kpi-titulo { font-size: .8rem; color: var(--texto-suave); font-weight: 700; }
+  .kpi-valor { font-family: var(--fuente-titulo); font-size: 1.6rem; font-weight: 700; white-space: nowrap; line-height: 1.2; }
+  .kpi-nota { font-size: .78rem; color: var(--texto-suave); }
+
+  .fila { display: grid; grid-template-columns: 1.6fr 1fr; gap: 1.25rem; margin-bottom: 1.25rem; }
+  .ver-todo { color: #c4b8ff; font-weight: 700; font-size: .85rem; }
+
+  .barras { display: flex; align-items: flex-end; gap: 1rem; height: 230px; padding-top: 1.5rem; }
+  .barras :global(.barra-col) { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: .4rem; }
+  .barras :global(.barra) { width: 100%; max-width: 56px; border-radius: 8px 8px 3px 3px; background: linear-gradient(180deg, var(--celeste), var(--morado)); box-shadow: 0 0 18px rgba(124,92,255,.35); }
+  .barras :global(.barra-valor) { font-size: .72rem; font-weight: 700; color: #c4b8ff; white-space: nowrap; }
+  .barras :global(.barra-mes) { font-size: .8rem; color: var(--texto-suave); text-transform: capitalize; }
+
+  .dona-contenedor { display: flex; flex-direction: column; align-items: center; gap: 1.25rem; }
+  .dona { width: 170px; height: 170px; border-radius: 50%; display: grid; place-items: center; box-shadow: 0 0 30px rgba(124,92,255,.25); }
+  .dona-centro { width: 112px; height: 112px; border-radius: 50%; background: var(--panel); display: grid; place-content: center; text-align: center; }
+  .dona-centro strong { font-family: var(--fuente-titulo); font-size: 1.9rem; line-height: 1; }
+  .dona-centro span { font-size: .75rem; color: var(--texto-suave); }
+  .leyenda { list-style: none; width: 100%; display: grid; gap: .5rem; }
+  .leyenda :global(li) { display: flex; align-items: center; gap: .6rem; font-size: .9rem; }
+  .leyenda :global(strong) { margin-left: auto; }
+  .leyenda :global(.punto) { width: 12px; height: 12px; border-radius: 3px; }
+
+  #ultimas-ventas :global(.con-portada) { display: flex; align-items: center; gap: .7rem; }
+  #ultimas-ventas :global(.portada-mini) { width: 38px; height: 38px; border-radius: 9px; }
+  #ultimas-ventas :global(.portada-mini .portada-icono) { font-size: 1.1rem; }
+  #ultimas-ventas :global(small) { display: block; color: var(--texto-suave); font-size: .75rem; }
+
+  .por-juego { list-style: none; display: grid; gap: .9rem; }
+  .por-juego :global(.fila-juego) { display: flex; justify-content: space-between; font-size: .9rem; margin-bottom: .3rem; }
+  .por-juego :global(.pista) { height: 8px; border-radius: 999px; background: var(--panel-2); overflow: hidden; }
+  .por-juego :global(.pista div) { height: 100%; border-radius: 999px; }
+
+  @media (max-width: 1100px) { .kpis { grid-template-columns: repeat(2, 1fr); } .fila { grid-template-columns: 1fr; } }
+  @media (max-width: 520px) { .kpis { grid-template-columns: 1fr; } }
+</style>

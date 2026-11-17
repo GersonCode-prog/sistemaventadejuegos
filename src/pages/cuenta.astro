@@ -1,0 +1,197 @@
+---
+import Sitio from '../layouts/Sitio.astro';
+import { ruta } from '../lib/ruta';
+---
+<Sitio titulo="Detalle de la cuenta">
+  <main class="envoltura detalle">
+    <a href={ruta('/#tienda')} class="volver">◀ Volver a la tienda</a>
+
+    <div id="no-encontrada" class="no-encontrada" hidden>
+      <p>👾 Esta cuenta ya fue vendida o no existe.</p>
+      <a href={ruta('/')} class="btn btn-primario">Ver otras cuentas</a>
+    </div>
+
+    <div id="contenido" hidden>
+      <div class="rejilla-detalle">
+        <div>
+          <div class="portada-contenedor" id="portada"></div>
+
+          <section class="bloque">
+            <h2>📜 Descripción</h2>
+            <p id="descripcion"></p>
+          </section>
+
+          <section class="bloque">
+            <h2>🎁 Lo que incluye</h2>
+            <ul class="incluye" id="incluye"></ul>
+          </section>
+
+          <section class="bloque">
+            <h2>📊 Detalles</h2>
+            <dl class="ficha" id="ficha"></dl>
+          </section>
+        </div>
+
+        <aside class="lateral-compra">
+          <div class="tarjeta caja-precio">
+            <p class="meta" id="meta"></p>
+            <h1 id="titulo"></h1>
+            <div class="fila-precio">
+              <p class="precio-grande" id="precio"></p>
+              <span class="oferta-grande" id="oferta" hidden></span>
+            </div>
+            <ul class="garantias">
+              <li>⚡ Entrega el mismo día</li>
+              <li>🛡️ Garantía de 7 días</li>
+              <li>🔐 Te ayudamos a cambiar correo y contraseña</li>
+              <li>💳 Transferencia, depósito, tarjeta o efectivo</li>
+            </ul>
+          </div>
+
+          <form class="tarjeta caja-solicitud" id="form-solicitud" novalidate>
+            <h3>¿La quieres? 🎮</h3>
+            <p class="ayuda">Déjanos tus datos y te escribimos por WhatsApp.</p>
+            <div class="tipos">
+              <label><input type="radio" name="tipo" value="Comprar" checked /> Comprar</label>
+              <label><input type="radio" name="tipo" value="Apartar" /> Apartar</label>
+              <label><input type="radio" name="tipo" value="Pregunta" /> Tengo una pregunta</label>
+            </div>
+            <div class="campo"><label>Nombre *</label><input name="nombre" required placeholder="Tu nombre o gamertag" /></div>
+            <div class="campo"><label>WhatsApp *</label><input name="telefono" required placeholder="5555-5555" pattern="[0-9\-\s+]{8,}" title="Al menos 8 dígitos" /></div>
+            <div class="campo"><label>Correo</label><input name="correo" type="email" placeholder="tu@correo.com" /></div>
+            <div class="campo"><label>Mensaje</label><textarea name="mensaje" rows="3" placeholder="¿Alguna duda sobre la cuenta?"></textarea></div>
+            <button type="submit" class="btn btn-primario enviar">Enviar solicitud ▶</button>
+            <p class="enviado" id="enviado" hidden>✅ ¡Listo! Te contactaremos muy pronto.</p>
+          </form>
+        </aside>
+      </div>
+
+      <section class="similares-seccion">
+        <h2>También te puede interesar</h2>
+        <div class="similares" id="similares"></div>
+      </section>
+    </div>
+  </main>
+</Sitio>
+
+<script>
+  import { obtener, buscarPorId, insertarOActualizar, nuevoId, hoy, formatoQ, escapar, porcentajeOferta, type Solicitud } from '../lib/datos';
+  import { portada, juegoPorId } from '../lib/juegos';
+  import { ruta } from '../lib/ruta';
+  import { aviso } from '../lib/ui';
+
+  const id = new URLSearchParams(location.search).get('id') || '';
+  const c = buscarPorId('cuentas', id);
+
+  if (!c || c.estado === 'Vendida') {
+    document.getElementById('no-encontrada')!.hidden = false;
+  } else {
+    document.getElementById('contenido')!.hidden = false;
+    const juego = juegoPorId(c.juego);
+    document.title = `${juego.nombre}: ${c.titulo} | GameVault GT`;
+    const poner = (k: string, t: string) => { document.getElementById(k)!.textContent = t; };
+
+    document.getElementById('portada')!.innerHTML = portada(c.juego, 'grande') +
+      (c.estado === 'Reservada' ? '<span class="insignia Reservada estado-portada">Apartada por otro cliente</span>' : '<span class="insignia Disponible estado-portada">Disponible</span>');
+    poner('descripcion', c.descripcion || 'Cuenta verificada lista para jugar.');
+    poner('meta', `${juego.nombre} · ${c.codigo}`);
+    poner('titulo', c.titulo);
+    poner('precio', formatoQ(c.precio));
+    const pct = porcentajeOferta(c);
+    if (pct) {
+      const o = document.getElementById('oferta')!;
+      o.hidden = false;
+      o.innerHTML = `-${pct}% <s>${formatoQ(c.precioAnterior)}</s>`;
+    }
+
+    document.getElementById('incluye')!.innerHTML = c.extras.length
+      ? c.extras.map((e) => `<li><span>✦</span>${escapar(e)}</li>`).join('')
+      : '<li>Consulta el detalle con un asesor.</li>';
+
+    const ficha: [string, string][] = [
+      ['Juego', juego.nombre], ['Plataforma', c.plataforma], ['Región', c.region],
+      ['Nivel', c.nivel ? String(c.nivel) : '—'], ['Rango', c.rango], ['Código', c.codigo],
+    ];
+    document.getElementById('ficha')!.innerHTML = ficha.map(([k, v]) => `<div><dt>${k}</dt><dd>${escapar(v)}</dd></div>`).join('');
+
+    const form = document.getElementById('form-solicitud') as HTMLFormElement;
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (!form.reportValidity()) return;
+      const d = Object.fromEntries(new FormData(form).entries()) as Record<string, string>;
+      const solicitud: Solicitud = {
+        id: nuevoId(), cuentaId: c.id, nombre: d.nombre.trim(), telefono: d.telefono.trim(), correo: d.correo.trim(),
+        tipo: d.tipo as Solicitud['tipo'], mensaje: d.mensaje.trim(), fecha: hoy(), estado: 'Nueva',
+      };
+      insertarOActualizar('solicitudes', solicitud);
+      form.reset();
+      document.getElementById('enviado')!.hidden = false;
+      aviso('Solicitud enviada');
+    });
+
+    const similares = obtener('cuentas')
+      .filter((x) => x.id !== c.id && x.estado !== 'Vendida')
+      .sort((x, y) => Number(y.juego === c.juego) - Number(x.juego === c.juego) || Math.abs(x.precio - c.precio) - Math.abs(y.precio - c.precio))
+      .slice(0, 3);
+    document.getElementById('similares')!.innerHTML = similares.map((x) => `
+      <a href="${ruta('/cuenta')}?id=${x.id}" class="similar">
+        ${portada(x.juego, 'mini')}
+        <div><small>${escapar(juegoPorId(x.juego).nombre)}</small><strong>${escapar(x.titulo)}</strong><p>${formatoQ(x.precio)}</p></div>
+      </a>`).join('');
+  }
+</script>
+
+<style>
+  .detalle { padding-top: 1.5rem; }
+  .volver { display: inline-block; color: var(--texto-suave); font-weight: 700; margin-bottom: 1.25rem; }
+  .volver:hover { color: var(--texto); }
+  .no-encontrada { text-align: center; padding: 4rem 1rem; display: grid; gap: 1rem; justify-items: center; color: var(--texto-suave); font-size: 1.1rem; }
+
+  .rejilla-detalle { display: grid; grid-template-columns: 1.5fr 1fr; gap: 2rem; align-items: start; }
+  .portada-contenedor { position: relative; box-shadow: 0 25px 60px rgba(0,0,0,.45); border-radius: 18px; }
+  .portada-contenedor :global(.estado-portada) { position: absolute; top: 1rem; left: 1rem; z-index: 2; background: rgba(11,14,26,.8); }
+
+  .bloque { margin-top: 2rem; }
+  .bloque h2 { font-size: 1.2rem; margin-bottom: .75rem; }
+  .bloque p { color: var(--texto-suave); line-height: 1.7; }
+  .incluye { list-style: none; display: grid; grid-template-columns: repeat(2, 1fr); gap: .6rem; }
+  .incluye :global(li) { display: flex; align-items: center; gap: .6rem; padding: .7rem .9rem; border-radius: 10px; background: var(--panel); border: 1px solid var(--borde); }
+  .incluye :global(li span) { color: var(--amarillo); }
+  .ficha { display: grid; grid-template-columns: repeat(2, 1fr); border: 1px solid var(--borde); border-radius: 12px; overflow: hidden; background: var(--panel); }
+  .ficha :global(div) { display: flex; justify-content: space-between; padding: .75rem 1rem; border-bottom: 1px solid var(--borde); }
+  .ficha :global(div:nth-child(odd)) { border-right: 1px solid var(--borde); }
+  .ficha :global(dt) { color: var(--texto-suave); font-size: .9rem; }
+  .ficha :global(dd) { font-weight: 700; }
+
+  .lateral-compra { position: sticky; top: 90px; display: grid; gap: 1.25rem; }
+  .caja-precio { padding: 1.5rem; }
+  .meta { color: var(--celeste); font-size: .82rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+  .caja-precio h1 { font-size: 1.6rem; margin: .3rem 0 .8rem; }
+  .fila-precio { display: flex; align-items: center; gap: .8rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
+  .precio-grande { font-family: var(--fuente-titulo); font-size: 2.1rem; font-weight: 700; color: var(--verde); text-shadow: 0 0 20px rgba(34,227,162,.3); }
+  .oferta-grande { padding: .25rem .6rem; border-radius: 8px; background: rgba(255,79,163,.15); color: var(--rosa); font-weight: 800; }
+  .oferta-grande :global(s) { color: var(--texto-suave); font-weight: 400; margin-left: .3rem; }
+  .garantias { list-style: none; display: grid; gap: .55rem; padding-top: 1.1rem; border-top: 1px solid var(--borde); color: #b8c0dc; font-size: .92rem; }
+
+  .caja-solicitud { padding: 1.5rem; display: grid; gap: .9rem; }
+  .caja-solicitud h3 { font-size: 1.2rem; }
+  .ayuda { color: var(--texto-suave); font-size: .88rem; margin-top: -.6rem; }
+  .tipos { display: flex; flex-wrap: wrap; gap: .4rem; }
+  .tipos label { display: flex; align-items: center; gap: .35rem; padding: .4rem .75rem; border: 1px solid var(--borde); border-radius: 999px; font-size: .82rem; cursor: pointer; }
+  .tipos label:has(input:checked) { border-color: var(--morado); background: rgba(124,92,255,.15); color: #c4b8ff; font-weight: 700; }
+  .tipos input { accent-color: var(--morado); }
+  .enviar { padding: .8rem; }
+  .enviado { color: var(--verde); font-weight: 700; font-size: .9rem; }
+
+  .similares-seccion { margin-top: 3.5rem; }
+  .similares-seccion h2 { font-size: 1.4rem; margin-bottom: 1rem; text-transform: uppercase; }
+  .similares { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+  .similares :global(.similar) { display: flex; gap: 1rem; align-items: center; padding: 1rem; border: 1px solid var(--borde); border-radius: 12px; background: var(--panel); transition: border-color .15s; }
+  .similares :global(.similar:hover) { border-color: var(--morado); }
+  .similares :global(small) { display: block; color: var(--celeste); font-size: .72rem; font-weight: 700; text-transform: uppercase; }
+  .similares :global(strong) { display: block; font-size: .92rem; }
+  .similares :global(p) { color: var(--verde); font-weight: 700; font-size: .9rem; }
+
+  @media (max-width: 900px) { .rejilla-detalle, .similares { grid-template-columns: 1fr; } .lateral-compra { position: static; } }
+  @media (max-width: 520px) { .ficha, .incluye { grid-template-columns: 1fr; } .ficha :global(div:nth-child(odd)) { border-right: none; } }
+</style>

@@ -1,0 +1,219 @@
+---
+import Sitio from '../layouts/Sitio.astro';
+import { JUEGOS } from '../lib/juegos';
+---
+<Sitio titulo="Tienda de cuentas">
+  <section class="hero">
+    <div class="brillo b1"></div><div class="brillo b2"></div>
+    <div class="envoltura hero-contenido">
+      <p class="etiqueta-hero">⚡ Entrega rápida · 🛡️ Garantía de 7 días</p>
+      <h1>Sube de nivel <span>sin empezar de cero</span></h1>
+      <p class="hero-texto">Cuentas de tus juegos favoritos con skins, rangos y objetos raros. Verificadas y listas para jugar.</p>
+      <div class="hero-busqueda">
+        <input class="control" id="buscar" placeholder="Busca por juego, skin o rango: Fortnite, Inmortal, Korblox..." />
+        <a href="#tienda" class="btn btn-primario">Buscar</a>
+      </div>
+      <div class="hero-datos">
+        <div><strong id="dato-disponibles">0</strong><span>cuentas disponibles</span></div>
+        <div><strong>{JUEGOS.length}</strong><span>juegos</span></div>
+        <div><strong>+500</strong><span>gamers felices</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="envoltura" id="destacadas-seccion">
+    <h2 class="titulo">🔥 Destacadas</h2>
+    <div class="destacadas" id="destacadas"></div>
+  </section>
+
+  <section class="envoltura" id="tienda">
+    <h2 class="titulo">🎮 Elige tu juego</h2>
+    <div class="juegos" id="juegos">
+      <button class="juego activo" data-juego=""><span>🕹️</span>Todos</button>
+      {JUEGOS.map((j) => (
+        <button class="juego" data-juego={j.id} style={`--c1:${j.color1};--c2:${j.color2}`}><span>{j.icono}</span>{j.nombre}</button>
+      ))}
+    </div>
+
+    <div class="barra-filtros">
+      <p class="contador" id="contador"></p>
+      <div class="filtros">
+        <label class="solo-ofertas"><input type="checkbox" id="solo-ofertas" /> Solo ofertas</label>
+        <select class="control" id="filtro-plataforma">
+          <option value="">Todas las plataformas</option>
+          <option>PC</option><option>PlayStation</option><option>Xbox</option><option>Nintendo Switch</option><option>Móvil</option><option>Multiplataforma</option>
+        </select>
+        <select class="control" id="filtro-precio">
+          <option value="">Cualquier precio</option>
+          <option value="500">Hasta Q 500</option>
+          <option value="1000">Hasta Q 1,000</option>
+          <option value="2000">Hasta Q 2,000</option>
+        </select>
+        <select class="control" id="orden">
+          <option value="reciente">Más recientes</option>
+          <option value="precio-asc">Precio: menor a mayor</option>
+          <option value="precio-desc">Precio: mayor a menor</option>
+          <option value="nivel">Mayor nivel</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="rejilla" id="rejilla"></div>
+  </section>
+
+  <section class="envoltura" id="como-funciona">
+    <h2 class="titulo centrado">¿Cómo funciona?</h2>
+    <div class="pasos">
+      <div class="paso"><span class="num">1</span><span class="ico">🔍</span><h3>Elige tu cuenta</h3><p>Revisa el nivel, rango y todo lo que incluye.</p></div>
+      <div class="paso"><span class="num">2</span><span class="ico">💬</span><h3>Envía tu solicitud</h3><p>Un asesor te contacta por WhatsApp para confirmar.</p></div>
+      <div class="paso"><span class="num">3</span><span class="ico">💳</span><h3>Realiza el pago</h3><p>Transferencia, depósito, tarjeta o efectivo.</p></div>
+      <div class="paso"><span class="num">4</span><span class="ico">🎁</span><h3>Recibe tu acceso</h3><p>Te ayudamos a cambiar correo y contraseña. ¡A jugar!</p></div>
+    </div>
+  </section>
+</Sitio>
+
+<script>
+  import { obtener, formatoQ, escapar, porcentajeOferta, type Cuenta } from '../lib/datos';
+  import { portada, juegoPorId } from '../lib/juegos';
+  import { ruta } from '../lib/ruta';
+
+  const cuentas = obtener('cuentas').filter((c) => c.estado !== 'Vendida');
+  const buscar = document.getElementById('buscar') as HTMLInputElement;
+  const filtroPlataforma = document.getElementById('filtro-plataforma') as HTMLSelectElement;
+  const filtroPrecio = document.getElementById('filtro-precio') as HTMLSelectElement;
+  const soloOfertas = document.getElementById('solo-ofertas') as HTMLInputElement;
+  const orden = document.getElementById('orden') as HTMLSelectElement;
+  let juego = '';
+
+  document.getElementById('dato-disponibles')!.textContent = String(cuentas.filter((c) => c.estado === 'Disponible').length);
+
+  const precioHtml = (c: Cuenta) => {
+    const pct = porcentajeOferta(c);
+    return `<p class="precio">${formatoQ(c.precio).replace('.00', '')}${pct ? `<s>${formatoQ(c.precioAnterior).replace('.00', '')}</s>` : ''}</p>`;
+  };
+
+  const tarjeta = (c: Cuenta) => {
+    const pct = porcentajeOferta(c);
+    return `
+    <a href="${ruta('/cuenta')}?id=${c.id}" class="cuenta">
+      <div class="cuenta-portada">
+        ${portada(c.juego)}
+        ${pct ? `<span class="oferta">-${pct}%</span>` : ''}
+        ${c.estado === 'Reservada' ? '<span class="insignia Reservada reservada">Apartada</span>' : ''}
+      </div>
+      <div class="cuenta-cuerpo">
+        <p class="cuenta-meta">${escapar(juegoPorId(c.juego).nombre)} · ${escapar(c.plataforma)}</p>
+        <h3>${escapar(c.titulo)}</h3>
+        <div class="stats">
+          ${c.nivel ? `<span>⭐ Nv. ${c.nivel}</span>` : ''}<span>🏆 ${escapar(c.rango)}</span><span>🌎 ${escapar(c.region)}</span>
+        </div>
+        <div class="extras">${c.extras.slice(0, 3).map((e) => `<span>${escapar(e)}</span>`).join('')}${c.extras.length > 3 ? `<span>+${c.extras.length - 3}</span>` : ''}</div>
+        <div class="cuenta-pie">${precioHtml(c)}<span class="ver">Ver ▶</span></div>
+      </div>
+    </a>`;
+  };
+
+  // Destacadas
+  const destacadas = cuentas.filter((c) => c.destacada && c.estado === 'Disponible').slice(0, 3);
+  document.getElementById('destacadas')!.innerHTML = destacadas.map(tarjeta).join('');
+  document.getElementById('destacadas-seccion')!.hidden = destacadas.length === 0;
+
+  function pintar() {
+    const texto = buscar.value.toLowerCase().trim();
+    const maximo = Number(filtroPrecio.value) || Infinity;
+    const lista = cuentas.filter((c) =>
+      (!juego || c.juego === juego) &&
+      (!filtroPlataforma.value || c.plataforma === filtroPlataforma.value) &&
+      (!soloOfertas.checked || porcentajeOferta(c) > 0) &&
+      c.precio <= maximo &&
+      (!texto || `${juegoPorId(c.juego).nombre} ${c.titulo} ${c.rango} ${c.extras.join(' ')}`.toLowerCase().includes(texto)));
+
+    if (orden.value === 'reciente') lista.sort((a, b) => b.creado.localeCompare(a.creado));
+    if (orden.value === 'precio-asc') lista.sort((a, b) => a.precio - b.precio);
+    if (orden.value === 'precio-desc') lista.sort((a, b) => b.precio - a.precio);
+    if (orden.value === 'nivel') lista.sort((a, b) => b.nivel - a.nivel);
+
+    document.getElementById('contador')!.textContent = `${lista.length} cuenta${lista.length === 1 ? '' : 's'} encontrada${lista.length === 1 ? '' : 's'}`;
+    document.getElementById('rejilla')!.innerHTML = lista.length ? lista.map(tarjeta).join('')
+      : '<div class="sin-resultados">👾 No hay cuentas con esos filtros… ¡vuelve pronto!</div>';
+  }
+
+  document.querySelectorAll<HTMLButtonElement>('.juego').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('.juego').forEach((x) => x.classList.remove('activo'));
+    b.classList.add('activo');
+    juego = b.dataset.juego || '';
+    pintar();
+  }));
+  buscar.addEventListener('input', () => {
+    pintar();
+    document.getElementById('destacadas-seccion')!.hidden = !!buscar.value.trim() || destacadas.length === 0;
+  });
+  [filtroPlataforma, filtroPrecio, soloOfertas, orden].forEach((el) => el.addEventListener('input', pintar));
+  pintar();
+</script>
+
+<style>
+  .hero { position: relative; overflow: hidden; padding: 5rem 0 4rem; text-align: center; border-bottom: 1px solid var(--borde);
+    background-image: linear-gradient(var(--borde) 1px, transparent 1px), linear-gradient(90deg, var(--borde) 1px, transparent 1px); background-size: 48px 48px; }
+  .hero::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 0%, var(--fondo) 70%); }
+  .brillo { position: absolute; width: 420px; height: 420px; border-radius: 50%; filter: blur(110px); opacity: .45; }
+  .b1 { background: var(--morado); top: -160px; left: 10%; }
+  .b2 { background: var(--celeste); bottom: -200px; right: 8%; }
+  .hero-contenido { position: relative; }
+  .etiqueta-hero { display: inline-block; padding: .4rem .9rem; border-radius: 999px; background: rgba(124,92,255,.15); border: 1px solid rgba(124,92,255,.4); color: #c4b8ff; font-weight: 600; font-size: .85rem; margin-bottom: 1.25rem; }
+  .hero h1 { font-size: clamp(2.3rem, 5.5vw, 4rem); margin-bottom: 1rem; text-transform: uppercase; }
+  .hero h1 span { display: block; background: var(--degradado); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .hero-texto { font-size: 1.1rem; color: var(--texto-suave); max-width: 580px; margin: 0 auto 2rem; }
+  .hero-busqueda { display: flex; gap: .5rem; max-width: 620px; margin: 0 auto; padding: .4rem; border-radius: 14px; background: var(--panel); border: 1px solid var(--borde); box-shadow: 0 0 40px rgba(124,92,255,.25); }
+  .hero-busqueda .control { border: none; background: transparent; box-shadow: none; }
+  .hero-datos { display: flex; justify-content: center; gap: 3rem; margin-top: 2.5rem; }
+  .hero-datos strong { display: block; font-family: var(--fuente-titulo); font-size: 2rem; background: var(--degradado); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .hero-datos span { font-size: .85rem; color: var(--texto-suave); }
+
+  .titulo { font-size: 1.6rem; text-transform: uppercase; margin: 3rem 0 1.25rem; }
+  .centrado { text-align: center; }
+  #tienda { scroll-margin-top: 70px; }
+
+  .juegos { display: flex; gap: .6rem; overflow-x: auto; padding-bottom: .5rem; scrollbar-width: thin; }
+  .juego { flex-shrink: 0; display: flex; align-items: center; gap: .5rem; padding: .55rem 1rem; border-radius: 12px; border: 1px solid var(--borde); background: var(--panel); color: var(--texto-suave); font-weight: 700; cursor: pointer; transition: all .15s; }
+  .juego span { font-size: 1.2rem; }
+  .juego:hover { color: var(--texto); border-color: var(--morado); }
+  .juego.activo { color: #fff; border-color: transparent; background: linear-gradient(135deg, var(--c1, #7c5cff), var(--c2, #19afe1)); box-shadow: 0 6px 20px rgba(0,0,0,.4); }
+
+  .barra-filtros { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin: 1.25rem 0; }
+  .contador { color: var(--texto-suave); font-size: .9rem; }
+  .filtros { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
+  .filtros .control { width: auto; }
+  .solo-ofertas { display: flex; align-items: center; gap: .4rem; font-size: .88rem; color: var(--texto-suave); cursor: pointer; padding: 0 .4rem; }
+  .solo-ofertas input { accent-color: var(--rosa); }
+
+  .rejilla, .destacadas { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.25rem; }
+  :global(.cuenta) { display: flex; flex-direction: column; border: 1px solid var(--borde); border-radius: 16px; overflow: hidden; background: var(--panel); transition: transform .2s, border-color .2s, box-shadow .2s; }
+  :global(.cuenta:hover) { transform: translateY(-5px); border-color: var(--morado); box-shadow: 0 15px 40px rgba(124,92,255,.25); }
+  :global(.cuenta-portada) { position: relative; }
+  :global(.cuenta:hover .portada-icono) { transform: scale(1.15) rotate(-5deg); }
+  :global(.portada-icono) { transition: transform .3s; }
+  :global(.oferta) { position: absolute; top: .75rem; right: .75rem; z-index: 2; padding: .2rem .55rem; border-radius: 8px; background: var(--rosa); color: #fff; font-weight: 800; font-size: .8rem; box-shadow: 0 0 14px var(--rosa); }
+  :global(.reservada) { position: absolute; top: .75rem; left: .75rem; z-index: 2; background: rgba(11,14,26,.8) !important; }
+  :global(.cuenta-cuerpo) { padding: 1rem 1.15rem 1.15rem; display: flex; flex-direction: column; flex: 1; }
+  :global(.cuenta-meta) { font-size: .78rem; color: var(--celeste); font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+  :global(.cuenta h3) { font-size: 1.1rem; margin: .2rem 0 .6rem; }
+  :global(.stats) { display: flex; flex-wrap: wrap; gap: .7rem; font-size: .8rem; color: var(--texto-suave); margin-bottom: .7rem; }
+  :global(.extras) { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: 1rem; flex: 1; align-content: flex-start; }
+  :global(.extras span) { font-size: .72rem; padding: .2rem .5rem; border-radius: 6px; background: var(--panel-2); border: 1px solid var(--borde); color: #b8c0dc; }
+  :global(.cuenta-pie) { display: flex; justify-content: space-between; align-items: center; padding-top: .8rem; border-top: 1px solid var(--borde); }
+  :global(.precio) { font-family: var(--fuente-titulo); font-size: 1.4rem; font-weight: 700; color: var(--verde); }
+  :global(.precio s) { font-size: .85rem; color: var(--texto-suave); margin-left: .5rem; font-weight: 400; }
+  :global(.ver) { color: #c4b8ff; font-weight: 700; font-size: .9rem; }
+  :global(.sin-resultados) { grid-column: 1 / -1; text-align: center; padding: 3rem; color: var(--texto-suave); }
+
+  .pasos { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.25rem; }
+  .paso { position: relative; padding: 1.5rem; border-radius: 16px; background: var(--panel); border: 1px solid var(--borde); }
+  .num { position: absolute; top: 1rem; right: 1.2rem; font-family: var(--fuente-titulo); font-size: 2.2rem; font-weight: 700; color: rgba(124,92,255,.25); }
+  .ico { font-size: 1.8rem; }
+  .paso h3 { margin: .6rem 0 .3rem; }
+  .paso p { color: var(--texto-suave); font-size: .9rem; }
+
+  @media (max-width: 900px) { .pasos { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 520px) { .pasos { grid-template-columns: 1fr; } .hero-datos { gap: 1.5rem; } }
+</style>

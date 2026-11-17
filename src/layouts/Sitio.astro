@@ -1,0 +1,97 @@
+---
+// Plantilla de la TIENDA PÚBLICA (la ve cualquiera, sin iniciar sesión)
+import '@fontsource/chakra-petch/600.css';
+import '@fontsource/chakra-petch/700.css';
+import '@fontsource-variable/exo-2';
+import '../styles/global.css';
+import { ruta } from '../lib/ruta';
+
+interface Props { titulo: string; descripcion?: string }
+const { titulo, descripcion = 'Cuentas de videojuegos verificadas con entrega rápida y garantía. GameVault GT.' } = Astro.props;
+---
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content={descripcion} />
+    <title>{titulo} | GameVault GT</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎮</text></svg>" />
+  </head>
+  <body>
+    <header class="cabecera">
+      <div class="envoltura cabecera-fila">
+        <a href={ruta('/')} class="marca"><span class="marca-icono">🎮</span><span>Game<strong>Vault</strong><span class="gt"> GT</span></span></a>
+        <nav class="nav">
+          <a href={ruta('/#tienda')}>Tienda</a>
+          <a href={ruta('/#como-funciona')}>¿Cómo funciona?</a>
+          <a href={ruta('/#contacto')}>Contacto</a>
+        </nav>
+        <a href={ruta('/login')} class="btn btn-primario" id="btn-acceso" data-panel={ruta('/dashboard')}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg>
+          <span>Iniciar sesión</span>
+        </a>
+      </div>
+    </header>
+
+    <slot />
+
+    <footer class="pie" id="contacto">
+      <div class="envoltura pie-rejilla">
+        <div>
+          <p class="marca"><span class="marca-icono">🎮</span><span>Game<strong>Vault</strong> GT</span></p>
+          <p class="pie-texto">Cuentas verificadas, entrega rápida y garantía. Hecho por gamers para gamers.</p>
+        </div>
+        <div>
+          <h4>Contacto</h4>
+          <p>💬 WhatsApp: 5555-1234</p>
+          <p>✉️ soporte@gamevault.gt</p>
+          <p>🕹️ Discord: GameVault GT</p>
+        </div>
+        <div>
+          <h4>Horario de entrega</h4>
+          <p>Todos los días: 9:00 – 22:00</p>
+        </div>
+      </div>
+      <p class="derechos">© {new Date().getFullYear()} GameVault GT · Sitio de demostración · Los nombres de los juegos pertenecen a sus respectivos dueños.</p>
+    </footer>
+
+    <script>
+      import { usuarioActual } from '../lib/sesion';
+      const boton = document.getElementById('btn-acceso') as HTMLAnchorElement;
+      if (usuarioActual()) {
+        boton.href = boton.dataset.panel!;
+        boton.querySelector('span')!.textContent = 'Ir al panel';
+      }
+    </script>
+
+    <style>
+      :global(.envoltura) { width: min(1200px, 100% - 2.5rem); margin-inline: auto; }
+      .cabecera { position: sticky; top: 0; z-index: 30; background: rgba(11, 14, 26, .85); backdrop-filter: blur(12px); border-bottom: 1px solid var(--borde); }
+      .cabecera-fila { display: flex; align-items: center; gap: 2rem; height: 70px; }
+      .marca { display: flex; align-items: center; gap: .6rem; font-family: var(--fuente-titulo); font-weight: 700; font-size: 1.25rem; }
+      .marca strong { background: var(--degradado); -webkit-background-clip: text; background-clip: text; color: transparent; }
+      .marca-icono { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; background: var(--degradado); font-size: 1.1rem; box-shadow: 0 0 18px rgba(124,92,255,.5); }
+      .nav { display: flex; gap: 1.6rem; margin-left: auto; }
+      .nav a { font-weight: 600; color: var(--texto-suave); font-size: .92rem; }
+      .nav a:hover { color: var(--texto); }
+
+      .pie { background: #080a14; border-top: 1px solid var(--borde); padding: 3rem 0 1.25rem; margin-top: 4rem; }
+      .pie .marca { margin-bottom: .7rem; }
+      .pie-rejilla { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 2rem; }
+      .pie h4 { margin-bottom: .7rem; }
+      .pie p { font-size: .9rem; color: var(--texto-suave); margin-bottom: .3rem; }
+      .pie-texto { max-width: 340px; }
+      .derechos { text-align: center; font-size: .78rem; margin-top: 2.5rem; opacity: .7; }
+
+      @media (max-width: 760px) {
+        .nav { display: none; }
+        .cabecera-fila { gap: .75rem; }
+        #btn-acceso { margin-left: auto; padding: .55rem .8rem; }
+        .marca { font-size: 1.05rem; }
+        .pie-rejilla { grid-template-columns: 1fr; }
+      }
+      @media (max-width: 400px) { .gt { display: none; } }
+    </style>
+  </body>
+</html>

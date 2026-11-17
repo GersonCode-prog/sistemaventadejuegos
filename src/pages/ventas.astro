@@ -1,0 +1,323 @@
+---
+import Panel from '../layouts/Panel.astro';
+---
+<Panel titulo="Ventas" activo="ventas">
+  <button slot="acciones" class="btn btn-primario" id="btn-nueva">+ Nueva venta</button>
+
+  <section class="resumen">
+    <div class="tarjeta mini"><p>Ventas completadas</p><strong id="r-cantidad">0</strong></div>
+    <div class="tarjeta mini"><p>Total vendido</p><strong id="r-total">Q 0</strong></div>
+    <div class="tarjeta mini"><p>Venta promedio</p><strong id="r-promedio">Q 0</strong></div>
+    <div class="tarjeta mini"><p>Descuentos otorgados</p><strong id="r-descuentos">Q 0</strong></div>
+  </section>
+
+  <div class="tarjeta">
+    <div class="tarjeta-cabecera">
+      <div class="herramientas" style="flex:1">
+        <div class="buscador"><input class="control" id="buscar" placeholder="Buscar por folio, cliente o cuenta..." /></div>
+        <select class="control" id="filtro-estado">
+          <option value="">Todas</option><option>Completada</option><option>Anulada</option>
+        </select>
+        <select class="control" id="filtro-entrega">
+          <option value="">Cualquier entrega</option><option>Pendiente</option><option>Entregada</option>
+        </select>
+        <input class="control" type="month" id="filtro-mes" title="Filtrar por mes" />
+      </div>
+    </div>
+    <div class="tabla-scroll">
+      <table>
+        <thead>
+          <tr><th>Folio</th><th>Fecha</th><th>Cuenta</th><th>Cliente</th><th>Pago</th><th>Total</th><th>Entrega</th><th>Estado</th><th></th></tr>
+        </thead>
+        <tbody id="tabla"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Modal: nueva venta -->
+  <dialog class="modal" id="modal-venta">
+    <form id="form-venta" method="dialog">
+      <div class="modal-cabecera">
+        <h3>Registrar venta <span class="folio" id="folio-nuevo"></span></h3>
+        <button type="button" class="modal-cerrar" data-cerrar aria-label="Cerrar">×</button>
+      </div>
+      <div class="modal-cuerpo">
+        <div class="rejilla-form">
+          <div class="campo completo"><label>Cliente *</label><select name="clienteId" id="sel-cliente" required></select></div>
+          <div class="campo completo"><label>Cuenta *</label><select name="cuentaId" id="sel-cuenta" required></select></div>
+          <div class="vista-cuenta completo" id="vista-cuenta" hidden></div>
+          <div class="campo"><label>Fecha *</label><input type="date" name="fecha" required /></div>
+          <div class="campo"><label>Método de pago</label>
+            <select name="metodoPago"><option>Transferencia</option><option>Depósito</option><option>Tarjeta</option><option>Efectivo</option></select>
+          </div>
+          <div class="campo"><label>Precio (Q)</label><input name="precio" id="precio" type="number" readonly /></div>
+          <div class="campo"><label>Descuento (Q)</label><input name="descuento" id="descuento" type="number" min="0" step="10" value="0" /></div>
+          <label class="check completo"><input type="checkbox" name="entregada" /> 📦 El acceso ya fue entregado al cliente</label>
+        </div>
+        <div class="total-venta"><span>Total a pagar</span><strong id="total">Q 0.00</strong></div>
+      </div>
+      <div class="modal-acciones">
+        <button type="button" class="btn btn-secundario" data-cerrar>Cancelar</button>
+        <button type="submit" class="btn btn-primario">Registrar venta</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Modal: comprobante -->
+  <dialog class="modal" id="modal-recibo">
+    <div class="modal-cabecera">
+      <h3>Comprobante de venta</h3>
+      <button type="button" class="modal-cerrar" data-cerrar aria-label="Cerrar">×</button>
+    </div>
+    <div class="modal-cuerpo" id="recibo"></div>
+    <div class="modal-acciones">
+      <button type="button" class="btn btn-secundario" data-cerrar>Cerrar</button>
+      <button type="button" class="btn btn-primario" id="btn-imprimir">🖨️ Imprimir</button>
+    </div>
+  </dialog>
+</Panel>
+
+<script>
+  import { obtener, guardar, insertarOActualizar, buscarPorId, nuevoId, hoy, siguienteFolio, formatoQ, formatoQCorto, formatoFecha, escapar, type Venta } from '../lib/datos';
+  import { aviso, confirmar, prepararModal, leerFormulario } from '../lib/ui';
+  import { usuarioActual, esAdmin } from '../lib/sesion';
+  import { portada, juegoPorId } from '../lib/juegos';
+
+  const tabla = document.getElementById('tabla')!;
+  const buscar = document.getElementById('buscar') as HTMLInputElement;
+  const filtroEstado = document.getElementById('filtro-estado') as HTMLSelectElement;
+  const filtroMes = document.getElementById('filtro-mes') as HTMLInputElement;
+  const filtroEntrega = document.getElementById('filtro-entrega') as HTMLSelectElement;
+  const modalVenta = prepararModal('modal-venta');
+  const modalRecibo = prepararModal('modal-recibo');
+  const form = document.getElementById('form-venta') as HTMLFormElement;
+  const selCliente = document.getElementById('sel-cliente') as HTMLSelectElement;
+  const selCuenta = document.getElementById('sel-cuenta') as HTMLSelectElement;
+  const precio = document.getElementById('precio') as HTMLInputElement;
+  const descuento = document.getElementById('descuento') as HTMLInputElement;
+
+  const poner = (id: string, t: string) => { document.getElementById(id)!.textContent = t; };
+
+  function pintar() {
+    const cuentasLista = obtener('cuentas');
+    const clientes = obtener('clientes');
+    const todas = obtener('ventas');
+    const completadas = todas.filter((v) => v.estado === 'Completada');
+    const total = completadas.reduce((t, v) => t + v.total, 0);
+    poner('r-cantidad', String(completadas.length));
+    poner('r-total', formatoQCorto(total));
+    poner('r-promedio', formatoQCorto(completadas.length ? total / completadas.length : 0));
+    poner('r-descuentos', formatoQCorto(completadas.reduce((t, v) => t + v.descuento, 0)));
+
+    const texto = buscar.value.toLowerCase().trim();
+    const filas = todas
+      .map((v) => ({ v, c: clientes.find((x) => x.id === v.clienteId), a: cuentasLista.find((x) => x.id === v.cuentaId) }))
+      .filter(({ v, c, a }) =>
+        (!texto || `${v.folio} ${c?.nombre ?? ''} ${a?.titulo ?? ''} ${a?.codigo ?? ''} ${a ? juegoPorId(a.juego).nombre : ''}`.toLowerCase().includes(texto)) &&
+        (!filtroEntrega.value || v.entrega === filtroEntrega.value) &&
+        (!filtroEstado.value || v.estado === filtroEstado.value) &&
+        (!filtroMes.value || v.fecha.startsWith(filtroMes.value)))
+      .sort((x, y) => y.v.fecha.localeCompare(x.v.fecha) || y.v.folio.localeCompare(x.v.folio));
+
+    tabla.innerHTML = filas.length ? filas.map(({ v, c, a }) => `
+      <tr class="${v.estado === 'Anulada' ? 'anulada' : ''}">
+        <td><strong>${escapar(v.folio)}</strong></td>
+        <td>${formatoFecha(v.fecha)}</td>
+        <td><div class="con-portada">${a ? portada(a.juego, 'mini') : ''}<span>${escapar(a?.titulo ?? '—')}<small>${escapar(a?.codigo ?? '')}</small></span></div></td>
+        <td>${escapar(c?.nombre ?? '—')}</td>
+        <td>${escapar(v.metodoPago)}</td>
+        <td><strong>${formatoQ(v.total)}</strong>${v.descuento ? `<small class="desc">-${formatoQ(v.descuento)}</small>` : ''}</td>
+        <td>${v.estado === 'Completada'
+          ? `<button class="insignia ${v.entrega} entrega-btn" data-entrega="${v.id}" title="Cambiar estado de entrega">${v.entrega}</button>`
+          : '<span class="sin">—</span>'}</td>
+        <td><span class="insignia ${v.estado}">${v.estado}</span></td>
+        <td><div class="acciones-fila">
+          <button class="btn btn-icono" data-ver="${v.id}" title="Ver comprobante">🧾</button>
+          ${v.estado === 'Completada' ? `<button class="btn btn-icono peligro" data-anular="${v.id}" title="Anular venta" data-solo-admin>⛔</button>` : ''}
+        </div></td>
+      </tr>`).join('')
+      : '<tr><td colspan="9" class="vacio">🔍 No hay ventas con esos filtros.</td></tr>';
+  }
+
+  // ---------- Nueva venta ----------
+  function actualizarTotal() {
+    const p = Number(precio.value) || 0;
+    const d = Math.min(Number(descuento.value) || 0, p);
+    poner('total', formatoQ(p - d));
+  }
+
+  function alElegirCuenta() {
+    const a = buscarPorId('cuentas', selCuenta.value);
+    const vista = document.getElementById('vista-cuenta')!;
+    if (!a) { vista.hidden = true; precio.value = ''; actualizarTotal(); return; }
+    precio.value = String(a.precio);
+    vista.hidden = false;
+    vista.innerHTML = `${portada(a.juego, 'mini')}
+      <div><strong>${escapar(a.titulo)}</strong>
+      <p>${escapar(juegoPorId(a.juego).nombre)} · ${escapar(a.codigo)} · ${escapar(a.plataforma)} · ${escapar(a.rango)}</p>
+      <span class="insignia ${a.estado}">${a.estado}</span></div>`;
+    actualizarTotal();
+  }
+
+  function abrirNuevaVenta() {
+    const clientes = obtener('clientes');
+    const disponibles = obtener('cuentas').filter((v) => v.estado !== 'Vendida');
+    if (!clientes.length) return aviso('Primero registra un cliente', 'info');
+    if (!disponibles.length) return aviso('No hay cuentas disponibles para vender', 'info');
+
+    form.reset();
+    poner('folio-nuevo', siguienteFolio());
+    selCliente.innerHTML = '<option value="">Selecciona un cliente...</option>' +
+      clientes.map((c) => `<option value="${c.id}">${escapar(c.nombre)}${c.gamertag ? ` (${escapar(c.gamertag)})` : ''}</option>`).join('');
+    selCuenta.innerHTML = '<option value="">Selecciona una cuenta...</option>' +
+      disponibles.map((v) => `<option value="${v.id}">${juegoPorId(v.juego).icono} ${escapar(v.codigo)} · ${escapar(v.titulo)} — ${formatoQ(v.precio)}${v.estado === 'Reservada' ? ' · Reservada' : ''}</option>`).join('');
+    (form.elements.namedItem('fecha') as HTMLInputElement).value = hoy();
+    alElegirCuenta();
+    modalVenta.showModal();
+  }
+
+  selCuenta.addEventListener('change', alElegirCuenta);
+  descuento.addEventListener('input', actualizarTotal);
+  document.getElementById('btn-nueva')!.addEventListener('click', abrirNuevaVenta);
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (!form.reportValidity()) return;
+    const d = leerFormulario(form);
+    const cuenta = buscarPorId('cuentas', d.cuentaId);
+    if (!cuenta || cuenta.estado === 'Vendida') return aviso('Esa cuenta ya no está disponible', 'error');
+    const desc = Number(d.descuento) || 0;
+    if (desc < 0 || desc > cuenta.precio) return aviso('El descuento no es válido', 'error');
+
+    const venta: Venta = {
+      id: nuevoId(),
+      folio: siguienteFolio(),
+      cuentaId: cuenta.id,
+      clienteId: d.clienteId,
+      precio: cuenta.precio,
+      descuento: desc,
+      total: cuenta.precio - desc,
+      metodoPago: d.metodoPago as Venta['metodoPago'],
+      fecha: d.fecha,
+      vendedor: usuarioActual()?.nombre ?? '—',
+      entrega: d.entregada === 'on' ? 'Entregada' : 'Pendiente',
+      estado: 'Completada',
+    };
+    insertarOActualizar('ventas', venta);
+    insertarOActualizar('cuentas', { ...cuenta, estado: 'Vendida' });
+    modalVenta.close();
+    aviso(`Venta ${venta.folio} registrada`);
+    pintar();
+    verRecibo(venta.id);
+  });
+
+  // ---------- Comprobante ----------
+  function verRecibo(id: string) {
+    const v = buscarPorId('ventas', id);
+    if (!v) return;
+    const c = buscarPorId('clientes', v.clienteId);
+    const a = buscarPorId('cuentas', v.cuentaId);
+    document.getElementById('recibo')!.innerHTML = `
+      <div class="recibo">
+        <div class="recibo-cabecera">
+          <div><strong class="recibo-marca">🎮 GameVault GT</strong><p>Venta de cuentas de videojuegos</p></div>
+          <div class="derecha"><p class="recibo-folio">${escapar(v.folio)}</p><p>${formatoFecha(v.fecha)}</p>
+          <span class="insignia ${v.estado}">${v.estado}</span></div>
+        </div>
+        <div class="recibo-bloques">
+          <div><p class="etq">Cliente</p><strong>${escapar(c?.nombre ?? '—')}</strong><p>NIT: ${escapar(c?.nit || 'CF')}</p><p>${escapar(c?.telefono ?? '')}</p></div>
+          <div><p class="etq">Cuenta</p><strong>${escapar(a?.titulo ?? '—')}</strong>
+          <p>${escapar(a ? `${juegoPorId(a.juego).nombre} · ${a.plataforma}` : '')}</p><p>Código: ${escapar(a?.codigo ?? '—')}</p></div>
+        </div>
+        <table class="recibo-tabla">
+          <tr><td>Precio de la cuenta</td><td>${formatoQ(v.precio)}</td></tr>
+          <tr><td>Descuento</td><td>- ${formatoQ(v.descuento)}</td></tr>
+          <tr class="recibo-total"><td>Total</td><td>${formatoQ(v.total)}</td></tr>
+        </table>
+        <p class="recibo-pie">Método de pago: <strong>${escapar(v.metodoPago)}</strong> · Entrega: <strong>${escapar(v.entrega)}</strong> · Atendido por: ${escapar(v.vendedor)}</p>
+        <p class="recibo-nota">🔐 Recomendación: cambia el correo y la contraseña de la cuenta al recibirla. Garantía de 7 días a partir de la fecha de compra.</p>
+      </div>`;
+    modalRecibo.showModal();
+  }
+  document.getElementById('btn-imprimir')!.addEventListener('click', () => window.print());
+
+  // ---------- Acciones de la tabla ----------
+  tabla.addEventListener('click', async (e) => {
+    const boton = (e.target as HTMLElement).closest('button');
+    if (!boton) return;
+    if (boton.dataset.ver) verRecibo(boton.dataset.ver);
+    if (boton.dataset.entrega) {
+      guardar('ventas', obtener('ventas').map((x) => (x.id === boton.dataset.entrega
+        ? { ...x, entrega: x.entrega === 'Entregada' ? 'Pendiente' as const : 'Entregada' as const } : x)));
+      aviso('Estado de entrega actualizado');
+      pintar();
+    }
+    if (boton.dataset.anular) {
+      if (!esAdmin()) return aviso('Solo un administrador puede anular ventas', 'error');
+      const v = buscarPorId('ventas', boton.dataset.anular);
+      if (!v) return;
+      if (await confirmar('¿Anular venta?', `La venta ${v.folio} quedará anulada y la cuenta volverá a estar disponible.`, 'Anular')) {
+        guardar('ventas', obtener('ventas').map((x) => (x.id === v.id ? { ...x, estado: 'Anulada' as const } : x)));
+        const cuenta = buscarPorId('cuentas', v.cuentaId);
+        if (cuenta) insertarOActualizar('cuentas', { ...cuenta, estado: 'Disponible' });
+        aviso(`Venta ${v.folio} anulada`);
+        pintar();
+      }
+    }
+  });
+
+  [buscar, filtroEstado, filtroMes, filtroEntrega].forEach((el) => el.addEventListener('input', pintar));
+  pintar();
+
+  // Abre el formulario directo si viene del botón "Nueva venta" del dashboard
+  if (new URLSearchParams(location.search).get('nueva')) abrirNuevaVenta();
+</script>
+
+<style>
+  .resumen { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.25rem; }
+  .mini { padding: 1rem 1.2rem; border-left: 4px solid var(--morado); }
+  .mini p { font-size: .8rem; color: var(--texto-suave); font-weight: 700; }
+  .mini strong { font-size: 1.35rem; font-family: var(--fuente-titulo); }
+  @media (max-width: 900px) { .resumen { grid-template-columns: repeat(2, 1fr); } }
+
+  #tabla :global(.anulada td) { color: #5c6585; }
+  #tabla :global(.con-portada) { display: flex; align-items: center; gap: .65rem; }
+  #tabla :global(.portada-mini) { width: 38px; height: 38px; border-radius: 9px; }
+  #tabla :global(.portada-mini .portada-icono) { font-size: 1.1rem; }
+  #tabla :global(.con-portada small) { display: block; color: var(--texto-suave); font-size: .74rem; font-family: Consolas, monospace; }
+  #tabla :global(.entrega-btn) { border: none; cursor: pointer; }
+  #tabla :global(.entrega-btn:hover) { filter: brightness(1.25); }
+  #tabla :global(.sin) { color: #475069; }
+  .check { display: flex; align-items: center; gap: .5rem; font-weight: 700; font-size: .9rem; cursor: pointer; }
+  .check input { accent-color: var(--morado); width: 18px; height: 18px; }
+  #tabla :global(.anulada td strong) { text-decoration: line-through; }
+  #tabla :global(.desc) { display: block; font-size: .75rem; color: var(--verde); }
+
+  .folio { font-size: .85rem; color: #c4b8ff; margin-left: .4rem; }
+  .vista-cuenta { display: flex; gap: 1rem; align-items: center; padding: .8rem; border-radius: 12px; background: #0f1322; border: 1px solid var(--borde); }
+  .vista-cuenta :global(p) { font-size: .82rem; color: var(--texto-suave); margin-bottom: .3rem; }
+  .total-venta { display: flex; justify-content: space-between; align-items: center; margin-top: 1.25rem; padding: 1rem 1.2rem; border-radius: 12px; background: linear-gradient(135deg, rgba(124,92,255,.25), rgba(25,175,225,.15)); border: 1px solid rgba(124,92,255,.4); }
+  .total-venta strong { font-family: var(--fuente-titulo); font-size: 1.6rem; color: var(--verde); }
+
+  #recibo :global(.recibo-cabecera) { display: flex; justify-content: space-between; gap: 1rem; padding-bottom: 1rem; border-bottom: 2px solid var(--morado); margin-bottom: 1rem; }
+  #recibo :global(.recibo-marca) { font-size: 1.2rem; color: #c4b8ff; font-family: var(--fuente-titulo); }
+  #recibo :global(.derecha) { text-align: right; }
+  #recibo :global(.recibo-folio) { font-size: 1.2rem; font-weight: 700; }
+  #recibo :global(.recibo-bloques) { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.25rem; }
+  #recibo :global(.etq) { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--texto-suave); font-weight: 700; }
+  #recibo :global(.recibo-bloques p:not(.etq)) { font-size: .88rem; color: var(--texto-suave); }
+  #recibo :global(.recibo-tabla td) { padding: .6rem 0; }
+  #recibo :global(.recibo-tabla td:last-child) { text-align: right; }
+  #recibo :global(.recibo-total td) { font-size: 1.15rem; font-weight: 700; color: var(--verde); border-top: 2px solid var(--borde); }
+  #recibo :global(.recibo-pie) { margin-top: 1rem; font-size: .85rem; color: var(--texto-suave); }
+  #recibo :global(.recibo-nota) { margin-top: .8rem; padding: .7rem .9rem; border-radius: 10px; background: rgba(255,201,77,.1); border: 1px solid rgba(255,201,77,.3); color: var(--amarillo); font-size: .82rem; }
+
+  /* Al imprimir solo se ve el comprobante */
+  @media print {
+    :global(body *) { visibility: hidden; }
+    :global(#modal-recibo), :global(#modal-recibo *) { visibility: visible; }
+    :global(#modal-recibo) { position: absolute; inset: 0; width: 100%; max-height: none; box-shadow: none; background: #fff; color: #111; border: none; }
+    :global(#modal-recibo *) { color: #111 !important; }
+    :global(#modal-recibo .modal-acciones), :global(#modal-recibo .modal-cerrar) { display: none; }
+  }
+</style>
