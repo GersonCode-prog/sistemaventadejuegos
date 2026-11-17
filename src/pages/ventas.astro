@@ -81,7 +81,7 @@ import Panel from '../layouts/Panel.astro';
   import { obtener, guardar, insertarOActualizar, buscarPorId, nuevoId, hoy, siguienteFolio, formatoQ, formatoQCorto, formatoFecha, escapar, type Venta } from '../lib/datos';
   import { aviso, confirmar, prepararModal, leerFormulario } from '../lib/ui';
   import { usuarioActual, esAdmin } from '../lib/sesion';
-  import { portada, juegoPorId } from '../lib/juegos';
+  import { portadaCuenta, juegoPorId } from '../lib/juegos';
 
   const tabla = document.getElementById('tabla')!;
   const buscar = document.getElementById('buscar') as HTMLInputElement;
@@ -123,7 +123,7 @@ import Panel from '../layouts/Panel.astro';
       <tr class="${v.estado === 'Anulada' ? 'anulada' : ''}">
         <td><strong>${escapar(v.folio)}</strong></td>
         <td>${formatoFecha(v.fecha)}</td>
-        <td><div class="con-portada">${a ? portada(a.juego, 'mini') : ''}<span>${escapar(a?.titulo ?? '—')}<small>${escapar(a?.codigo ?? '')}</small></span></div></td>
+        <td><div class="con-portada">${a ? portadaCuenta(a, 'mini') : ''}<span>${escapar(a?.titulo ?? '—')}<small>${escapar(a?.codigo ?? '')}</small></span></div></td>
         <td>${escapar(c?.nombre ?? '—')}</td>
         <td>${escapar(v.metodoPago)}</td>
         <td><strong>${formatoQ(v.total)}</strong>${v.descuento ? `<small class="desc">-${formatoQ(v.descuento)}</small>` : ''}</td>
@@ -152,7 +152,7 @@ import Panel from '../layouts/Panel.astro';
     if (!a) { vista.hidden = true; precio.value = ''; actualizarTotal(); return; }
     precio.value = String(a.precio);
     vista.hidden = false;
-    vista.innerHTML = `${portada(a.juego, 'mini')}
+    vista.innerHTML = `${portadaCuenta(a, 'mini')}
       <div><strong>${escapar(a.titulo)}</strong>
       <p>${escapar(juegoPorId(a.juego).nombre)} · ${escapar(a.codigo)} · ${escapar(a.plataforma)} · ${escapar(a.rango)}</p>
       <span class="insignia ${a.estado}">${a.estado}</span></div>`;

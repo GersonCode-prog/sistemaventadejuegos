@@ -81,6 +81,11 @@ h1, h2, h3, h4 { font-family: var(--fuente-titulo); line-height: 1.2; letter-spa
 .portada-mini .portada-icono { font-size: 1.5rem; }
 .portada-mini .portada-nombre { display: none; }
 
+/* Portada con foto */
+.portada.con-imagen::after { display: none; }
+.portada.con-imagen img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: transform .4s; }
+.chip-juego { position: absolute; left: .7rem; bottom: .7rem; z-index: 1; padding: .2rem .6rem; border-radius: 8px; background: rgba(11,14,26,.8); backdrop-filter: blur(4px); font-size: .72rem; font-weight: 700; }
+
 /* ---------- Formularios ---------- */
 .campo { display: grid; gap: .35rem; }
 .campo label { font-size: .82rem; font-weight: 700; color: #b8c0dc; }

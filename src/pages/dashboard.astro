@@ -47,7 +47,7 @@ import { ruta } from '../lib/ruta';
 
 <script>
   import { obtener, formatoQ, formatoQCorto, escapar } from '../lib/datos';
-  import { juegoPorId, portada } from '../lib/juegos';
+  import { juegoPorId, portadaCuenta } from '../lib/juegos';
 
   const cuentas = obtener('cuentas');
   const clientes = obtener('clientes');
@@ -104,7 +104,7 @@ import { ruta } from '../lib/ruta';
     const cl = clientes.find((x) => x.id === v.clienteId);
     return `<tr>
       <td><strong>${escapar(v.folio)}</strong></td>
-      <td><div class="con-portada">${c ? portada(c.juego, 'mini') : ''}<span>${escapar(c?.titulo ?? '—')}<small>${escapar(c ? juegoPorId(c.juego).nombre : '')}</small></span></div></td>
+      <td><div class="con-portada">${c ? portadaCuenta(c, 'mini') : ''}<span>${escapar(c?.titulo ?? '—')}<small>${escapar(c ? juegoPorId(c.juego).nombre : '')}</small></span></div></td>
       <td>${escapar(cl?.nombre ?? '—')}</td>
       <td><strong>${formatoQ(v.total)}</strong></td>
       <td><span class="insignia ${v.entrega}">${v.entrega}</span></td></tr>`;

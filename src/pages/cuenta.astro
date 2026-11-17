@@ -15,6 +15,7 @@ import { ruta } from '../lib/ruta';
       <div class="rejilla-detalle">
         <div>
           <div class="portada-contenedor" id="portada"></div>
+          <div class="miniaturas" id="miniaturas" hidden></div>
 
           <section class="bloque">
             <h2>📜 Descripción</h2>
@@ -66,6 +67,11 @@ import { ruta } from '../lib/ruta';
         </aside>
       </div>
 
+      <dialog class="visor" id="visor">
+        <button type="button" class="visor-cerrar" aria-label="Cerrar">×</button>
+        <img id="visor-img" alt="" />
+      </dialog>
+
       <section class="similares-seccion">
         <h2>También te puede interesar</h2>
         <div class="similares" id="similares"></div>
@@ -76,7 +82,7 @@ import { ruta } from '../lib/ruta';
 
 <script>
   import { obtener, buscarPorId, insertarOActualizar, nuevoId, hoy, formatoQ, escapar, porcentajeOferta, type Solicitud } from '../lib/datos';
-  import { portada, juegoPorId } from '../lib/juegos';
+  import { portada, portadaCuenta, juegoPorId } from '../lib/juegos';
   import { ruta } from '../lib/ruta';
   import { aviso } from '../lib/ui';
 
@@ -91,8 +97,57 @@ import { ruta } from '../lib/ruta';
     document.title = `${juego.nombre}: ${c.titulo} | GameVault GT`;
     const poner = (k: string, t: string) => { document.getElementById(k)!.textContent = t; };
 
-    document.getElementById('portada')!.innerHTML = portada(c.juego, 'grande') +
-      (c.estado === 'Reservada' ? '<span class="insignia Reservada estado-portada">Apartada por otro cliente</span>' : '<span class="insignia Disponible estado-portada">Disponible</span>');
+    // ---- Galería de fotos ----
+    const estadoHtml = c.estado === 'Reservada'
+      ? '<span class="insignia Reservada estado-portada">Apartada por otro cliente</span>'
+      : '<span class="insignia Disponible estado-portada">Disponible</span>';
+    const fotos = c.imagenes ?? [];
+    const contenedor = document.getElementById('portada')!;
+
+    if (!fotos.length) {
+      contenedor.innerHTML = portada(c.juego, 'grande') + estadoHtml;
+    } else {
+      let actual = 0;
+      const miniaturas = document.getElementById('miniaturas')!;
+      const visor = document.getElementById('visor') as HTMLDialogElement;
+      const visorImg = document.getElementById('visor-img') as HTMLImageElement;
+
+      const mostrar = (i: number) => {
+        actual = (i + fotos.length) % fotos.length;
+        contenedor.innerHTML = `
+          <div class="foto-principal"><img src="${fotos[actual]}" alt="Foto ${actual + 1} de la cuenta" /></div>
+          ${estadoHtml}
+          <span class="chip-juego">${juego.icono} ${escapar(juego.nombre)}</span>
+          ${fotos.length > 1 ? `
+            <button type="button" class="flecha izq" data-mover="-1" aria-label="Foto anterior">‹</button>
+            <button type="button" class="flecha der" data-mover="1" aria-label="Foto siguiente">›</button>
+            <span class="contador-fotos">${actual + 1} / ${fotos.length}</span>` : ''}
+          <span class="ampliar">🔍 Clic para ampliar</span>`;
+        miniaturas.querySelectorAll('button').forEach((b, k) => b.classList.toggle('activa', k === actual));
+      };
+
+      miniaturas.hidden = fotos.length < 2;
+      miniaturas.innerHTML = fotos.map((f, i) => `<button type="button" data-foto="${i}"><img src="${f}" alt="Miniatura ${i + 1}" /></button>`).join('');
+      miniaturas.addEventListener('click', (e) => {
+        const b = (e.target as HTMLElement).closest('button');
+        if (b) mostrar(Number(b.dataset.foto));
+      });
+      contenedor.addEventListener('click', (e) => {
+        const b = (e.target as HTMLElement).closest('button');
+        if (b?.dataset.mover) return mostrar(actual + Number(b.dataset.mover));
+        if ((e.target as HTMLElement).closest('.foto-principal')) {
+          visorImg.src = fotos[actual];
+          visor.showModal();
+        }
+      });
+      visor.addEventListener('click', () => visor.close());
+      document.addEventListener('keydown', (e) => {
+        if (visor.open) return;
+        if (e.key === 'ArrowLeft') mostrar(actual - 1);
+        if (e.key === 'ArrowRight') mostrar(actual + 1);
+      });
+      mostrar(0);
+    }
     poner('descripcion', c.descripcion || 'Cuenta verificada lista para jugar.');
     poner('meta', `${juego.nombre} · ${c.codigo}`);
     poner('titulo', c.titulo);
@@ -135,7 +190,7 @@ import { ruta } from '../lib/ruta';
       .slice(0, 3);
     document.getElementById('similares')!.innerHTML = similares.map((x) => `
       <a href="${ruta('/cuenta')}?id=${x.id}" class="similar">
-        ${portada(x.juego, 'mini')}
+        ${portadaCuenta(x, 'mini')}
         <div><small>${escapar(juegoPorId(x.juego).nombre)}</small><strong>${escapar(x.titulo)}</strong><p>${formatoQ(x.precio)}</p></div>
       </a>`).join('');
   }
@@ -150,6 +205,23 @@ import { ruta } from '../lib/ruta';
   .rejilla-detalle { display: grid; grid-template-columns: 1.5fr 1fr; gap: 2rem; align-items: start; }
   .portada-contenedor { position: relative; box-shadow: 0 25px 60px rgba(0,0,0,.45); border-radius: 18px; }
   .portada-contenedor :global(.estado-portada) { position: absolute; top: 1rem; left: 1rem; z-index: 2; background: rgba(11,14,26,.8); }
+  .portada-contenedor :global(.foto-principal) { aspect-ratio: 16 / 9; border-radius: 18px; overflow: hidden; background: #000; cursor: zoom-in; }
+  .portada-contenedor :global(.foto-principal img) { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .portada-contenedor :global(.chip-juego) { bottom: 1rem; left: 1rem; }
+  .portada-contenedor :global(.flecha) { position: absolute; top: 50%; transform: translateY(-50%); z-index: 2; width: 44px; height: 44px; border-radius: 50%; border: 1px solid rgba(255,255,255,.25); background: rgba(11,14,26,.7); color: #fff; font-size: 1.8rem; line-height: 1; cursor: pointer; }
+  .portada-contenedor :global(.flecha:hover) { background: var(--morado); }
+  .portada-contenedor :global(.izq) { left: 1rem; }
+  .portada-contenedor :global(.der) { right: 1rem; }
+  .portada-contenedor :global(.contador-fotos) { position: absolute; top: 1rem; right: 1rem; z-index: 2; padding: .2rem .6rem; border-radius: 8px; background: rgba(11,14,26,.8); font-size: .8rem; font-weight: 700; }
+  .portada-contenedor :global(.ampliar) { position: absolute; bottom: 1rem; right: 1rem; z-index: 2; padding: .2rem .6rem; border-radius: 8px; background: rgba(11,14,26,.8); font-size: .75rem; color: var(--texto-suave); }
+  .miniaturas { display: flex; gap: .6rem; margin-top: .8rem; }
+  .miniaturas :global(button) { width: 96px; aspect-ratio: 16 / 9; padding: 0; border-radius: 10px; overflow: hidden; border: 2px solid var(--borde); background: #000; cursor: pointer; opacity: .6; transition: opacity .15s, border-color .15s; }
+  .miniaturas :global(button.activa), .miniaturas :global(button:hover) { opacity: 1; border-color: var(--morado); }
+  .miniaturas :global(img) { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .visor { margin: auto; padding: 0; border: none; background: transparent; max-width: 94vw; max-height: 92vh; }
+  .visor::backdrop { background: rgba(0,0,0,.88); }
+  .visor img { max-width: 94vw; max-height: 92vh; display: block; border-radius: 10px; }
+  .visor-cerrar { position: fixed; top: 1rem; right: 1.25rem; width: 44px; height: 44px; border-radius: 50%; border: none; background: rgba(255,255,255,.15); color: #fff; font-size: 1.8rem; cursor: pointer; }
 
   .bloque { margin-top: 2rem; }
   .bloque h2 { font-size: 1.2rem; margin-bottom: .75rem; }

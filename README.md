@@ -16,12 +16,13 @@ Por ahora funciona **sin base de datos**: todo se guarda en el navegador (`local
 
 ### Tienda pública (sin iniciar sesión)
 - **Tienda**: cuentas destacadas, filtro por juego, plataforma, precio, ofertas y orden
-- **Detalle de la cuenta**: lo que incluye, nivel, rango, región y garantías
+- **Detalle de la cuenta**: galería de fotos con visor ampliado, lo que incluye, nivel, rango, región y garantías
 - **Solicitudes**: el visitante pide comprar, apartar o hace una pregunta, y le llega al panel
 
 ### Panel administrativo
 - **Dashboard**: indicadores, ventas de 6 meses, estado del inventario, inventario por juego
-- **Cuentas**: inventario con código automático por juego (FN-0001, VL-0002...), ofertas y destacadas
+- **Cuentas**: inventario con código automático por juego (FN-0001, VL-0002...), ofertas, destacadas y **hasta 4 fotos por cuenta**
+  (se comprimen automáticamente; la primera es la portada)
 - **Clientes**: con gamertag, búsqueda y número de compras
 - **Ventas**: registro, descuentos, **control de entrega** (pendiente/entregada), comprobante imprimible y anulación
 - **Solicitudes**: las que llegan de la tienda, con WhatsApp y registro rápido como cliente
@@ -44,6 +45,7 @@ src/
 ├── lib/
 │   ├── datos.ts     ← "base de datos" en localStorage + datos de ejemplo
 │   ├── juegos.ts    ← lista de juegos, colores, íconos y portadas
+│   ├── imagenes.ts  ← compresión de fotos y espacio usado
 │   ├── sesion.ts    ← usuarios, login y cierre de sesión
 │   ├── ui.ts        ← avisos, confirmaciones y modales
 │   └── ruta.ts      ← rutas con el prefijo del sitio

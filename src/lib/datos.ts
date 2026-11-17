@@ -1,3 +1,6 @@
+import { juegoPorId } from './juegos';
+import { imagenEjemplo } from './imagenes';
+
 // ============================================================
 //  DATOS — todo se guarda en localStorage (sin base de datos)
 // ============================================================
@@ -20,6 +23,7 @@ export interface Cuenta {
   estado: EstadoCuenta;
   destacada: boolean;
   descripcion: string;
+  imagenes?: string[];     // fotos comprimidas (data URL); la primera es la portada
   creado: string;
 }
 
@@ -77,8 +81,15 @@ export function obtener<K extends NombreColeccion>(nombre: K): Colecciones[K][] 
   }
 }
 
+export class SinEspacioError extends Error {}
+
 export function guardar<K extends NombreColeccion>(nombre: K, lista: Colecciones[K][]) {
-  localStorage.setItem(PREFIJO + nombre, JSON.stringify(lista));
+  try {
+    localStorage.setItem(PREFIJO + nombre, JSON.stringify(lista));
+  } catch {
+    // El navegador se quedó sin espacio (normalmente por muchas imágenes)
+    throw new SinEspacioError('No hay espacio suficiente en el navegador');
+  }
 }
 
 export function buscarPorId<K extends NombreColeccion>(nombre: K, id: string) {
@@ -188,6 +199,15 @@ function sembrarSiHaceFalta() {
       ['Pase élite actual', '12 trajes', '500 diamantes'], 300, 0, 'Disponible', false,
       'Cuenta económica con pase élite activo.'),
   ];
+  // Imágenes de ejemplo para las cuentas destacadas
+  cuentas.filter((x) => x.destacada).forEach((x) => {
+    const j = juegoPorId(x.juego);
+    const base = { color1: j.color1, color2: j.color2, icono: j.icono, juego: j.nombre, titulo: x.titulo };
+    x.imagenes = [
+      imagenEjemplo({ ...base, tipo: 'perfil', lineas: [`Nivel ${x.nivel || '—'}`, `Rango: ${x.rango}`, `Región: ${x.region}`] }),
+      imagenEjemplo({ ...base, tipo: 'inventario', lineas: x.extras }),
+    ];
+  });
   cuentas.forEach((x) => { x.codigo = `${PREFIJOS[x.juego]}-${String(cuentas.filter((y) => y.juego === x.juego).indexOf(x) + 1).padStart(4, '0')}`; });
 
   const cl = (nombre: string, gamertag: string, telefono: string, correo: string, nit: string): Cliente => ({

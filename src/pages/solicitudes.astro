@@ -25,7 +25,7 @@ import Panel from '../layouts/Panel.astro';
   import { obtener, guardar, insertarOActualizar, eliminar, buscarPorId, nuevoId, hoy, formatoQ, formatoFecha, escapar, type Solicitud, type EstadoSolicitud } from '../lib/datos';
   import { aviso, confirmar } from '../lib/ui';
   import { esAdmin } from '../lib/sesion';
-  import { portada, juegoPorId } from '../lib/juegos';
+  import { portadaCuenta, juegoPorId } from '../lib/juegos';
 
   const lista = document.getElementById('lista')!;
   const buscar = document.getElementById('buscar') as HTMLInputElement;
@@ -55,7 +55,7 @@ import Panel from '../layouts/Panel.astro';
     lista.innerHTML = filas.length ? filas.map(({ s, a }) => `
       <article class="tarjeta solicitud estado-${s.estado}">
         <div class="sol-auto">
-          ${a ? portada(a.juego, 'mini') : ''}
+          ${a ? portadaCuenta(a, 'mini') : ''}
           <strong>${escapar(a ? a.titulo : 'Cuenta eliminada')}</strong>
           <small>${escapar(a ? `${juegoPorId(a.juego).nombre} · ${a.codigo}` : '')}</small>
           <span>${a ? formatoQ(a.precio) : ''}${a?.estado === 'Vendida' ? ' · <em>Vendida</em>' : ''}</span>

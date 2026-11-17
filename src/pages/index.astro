@@ -74,7 +74,7 @@ import { JUEGOS } from '../lib/juegos';
 
 <script>
   import { obtener, formatoQ, escapar, porcentajeOferta, type Cuenta } from '../lib/datos';
-  import { portada, juegoPorId } from '../lib/juegos';
+  import { portadaCuenta, juegoPorId } from '../lib/juegos';
   import { ruta } from '../lib/ruta';
 
   const cuentas = obtener('cuentas').filter((c) => c.estado !== 'Vendida');
@@ -97,7 +97,7 @@ import { JUEGOS } from '../lib/juegos';
     return `
     <a href="${ruta('/cuenta')}?id=${c.id}" class="cuenta">
       <div class="cuenta-portada">
-        ${portada(c.juego)}
+        ${portadaCuenta(c)}
         ${pct ? `<span class="oferta">-${pct}%</span>` : ''}
         ${c.estado === 'Reservada' ? '<span class="insignia Reservada reservada">Apartada</span>' : ''}
       </div>
@@ -193,6 +193,8 @@ import { JUEGOS } from '../lib/juegos';
   :global(.cuenta-portada) { position: relative; }
   :global(.cuenta:hover .portada-icono) { transform: scale(1.15) rotate(-5deg); }
   :global(.portada-icono) { transition: transform .3s; }
+  :global(.cuenta:hover .con-imagen img) { transform: scale(1.06); }
+  :global(.cuenta-portada .portada) { height: 170px; }
   :global(.oferta) { position: absolute; top: .75rem; right: .75rem; z-index: 2; padding: .2rem .55rem; border-radius: 8px; background: var(--rosa); color: #fff; font-weight: 800; font-size: .8rem; box-shadow: 0 0 14px var(--rosa); }
   :global(.reservada) { position: absolute; top: .75rem; left: .75rem; z-index: 2; background: rgba(11,14,26,.8) !important; }
   :global(.cuenta-cuerpo) { padding: 1rem 1.15rem 1.15rem; display: flex; flex-direction: column; flex: 1; }

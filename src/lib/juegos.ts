@@ -35,3 +35,14 @@ export function portada(juegoId: string, tamano: 'normal' | 'grande' | 'mini' = 
     <span class="portada-nombre">${j.nombre}</span>
   </div>`;
 }
+
+// Portada de una cuenta: su primera foto si tiene, si no la portada de colores del juego
+export function portadaCuenta(c: { juego: string; imagenes?: string[] }, tamano: 'normal' | 'grande' | 'mini' = 'normal') {
+  const foto = c.imagenes?.[0];
+  if (!foto) return portada(c.juego, tamano);
+  const j = juegoPorId(c.juego);
+  return `<div class="portada portada-${tamano} con-imagen" style="--c1:${j.color1};--c2:${j.color2}">
+    <img src="${foto}" alt="" loading="lazy" />
+    ${tamano === 'mini' ? '' : `<span class="chip-juego">${j.icono} ${j.nombre}</span>`}
+  </div>`;
+}

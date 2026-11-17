@@ -54,6 +54,16 @@ import { JUEGOS } from '../lib/juegos';
           <div class="campo"><label>Precio anterior (Q) <small>para mostrar oferta</small></label><input name="precioAnterior" type="number" min="0" step="10" value="0" /></div>
           <div class="campo completo"><label>Lo que incluye <small>(uno por línea)</small></label><textarea name="extras" rows="4" placeholder={'Skin legendaria\n1,000 monedas\nPase de batalla'}></textarea></div>
           <div class="campo completo"><label>Descripción (se ve en la tienda)</label><textarea name="descripcion" rows="2"></textarea></div>
+          <div class="campo completo">
+            <label>📸 Fotos de la cuenta <small>(hasta 4 · la primera es la portada)</small></label>
+            <label class="zona-fotos" id="zona-fotos">
+              <input type="file" id="input-fotos" accept="image/*" multiple hidden />
+              <span class="zona-icono">🖼️</span>
+              <span><strong>Haz clic o arrastra tus capturas aquí</strong><br /><small>Se reducen automáticamente para ahorrar espacio</small></span>
+            </label>
+            <div class="fotos" id="fotos"></div>
+            <div class="espacio"><div class="espacio-barra"><div id="espacio-relleno"></div></div><small id="espacio-texto"></small></div>
+          </div>
           <label class="check completo"><input type="checkbox" name="destacada" /> ⭐ Mostrar en "Destacadas" de la tienda</label>
         </div>
       </div>
@@ -66,10 +76,11 @@ import { JUEGOS } from '../lib/juegos';
 </Panel>
 
 <script>
-  import { obtener, insertarOActualizar, eliminar, buscarPorId, nuevoId, hoy, formatoQ, escapar, porcentajeOferta, siguienteCodigo, type Cuenta } from '../lib/datos';
+  import { obtener, insertarOActualizar, eliminar, buscarPorId, nuevoId, hoy, formatoQ, escapar, porcentajeOferta, siguienteCodigo, SinEspacioError, type Cuenta } from '../lib/datos';
+  import { comprimirImagen, espacioUsado, tamanoKB, MAX_IMAGENES } from '../lib/imagenes';
   import { aviso, confirmar, prepararModal, leerFormulario, llenarFormulario } from '../lib/ui';
   import { esAdmin } from '../lib/sesion';
-  import { portada, juegoPorId } from '../lib/juegos';
+  import { portadaCuenta, juegoPorId } from '../lib/juegos';
   import { ruta } from '../lib/ruta';
 
   const lista = document.getElementById('lista')!;
@@ -80,6 +91,60 @@ import { JUEGOS } from '../lib/juegos';
   const modal = prepararModal('modal-cuenta');
   const form = document.getElementById('form-cuenta') as HTMLFormElement;
   const destacada = form.elements.namedItem('destacada') as HTMLInputElement;
+
+  // ---------- Fotos del formulario ----------
+  let fotos: string[] = [];
+  const contenedorFotos = document.getElementById('fotos')!;
+  const inputFotos = document.getElementById('input-fotos') as HTMLInputElement;
+  const zona = document.getElementById('zona-fotos')!;
+
+  function pintarEspacio() {
+    const uso = espacioUsado();
+    const relleno = document.getElementById('espacio-relleno')!;
+    relleno.style.width = `${uso}%`;
+    relleno.className = uso > 85 ? 'lleno' : uso > 60 ? 'medio' : '';
+    document.getElementById('espacio-texto')!.textContent = `Espacio del navegador usado: ${uso}%`;
+  }
+
+  function pintarFotos() {
+    contenedorFotos.innerHTML = fotos.map((f, i) => `
+      <div class="foto">
+        <img src="${f}" alt="Foto ${i + 1}" />
+        ${i === 0 ? '<span class="es-portada">★ Portada</span>' : `<button type="button" class="hacer-portada" data-portada="${i}">Hacer portada</button>`}
+        <button type="button" class="quitar" data-quitar="${i}" aria-label="Quitar foto">×</button>
+        <small class="peso">${tamanoKB(f)} KB</small>
+      </div>`).join('');
+    zona.hidden = fotos.length >= MAX_IMAGENES;
+    pintarEspacio();
+  }
+
+  async function agregarArchivos(archivos: FileList | File[]) {
+    const lista = [...archivos].filter((a) => a.type.startsWith('image/'));
+    if (!lista.length) return;
+    const libres = MAX_IMAGENES - fotos.length;
+    if (lista.length > libres) aviso(`Solo se pueden ${MAX_IMAGENES} fotos por cuenta`, 'info');
+    for (const archivo of lista.slice(0, libres)) {
+      try { fotos.push(await comprimirImagen(archivo)); }
+      catch (err) { aviso((err as Error).message, 'error'); }
+    }
+    pintarFotos();
+  }
+
+  inputFotos.addEventListener('change', () => { if (inputFotos.files) agregarArchivos(inputFotos.files); inputFotos.value = ''; });
+  zona.addEventListener('dragover', (e) => { e.preventDefault(); zona.classList.add('encima'); });
+  zona.addEventListener('dragleave', () => zona.classList.remove('encima'));
+  zona.addEventListener('drop', (e) => {
+    e.preventDefault();
+    zona.classList.remove('encima');
+    if (e.dataTransfer?.files) agregarArchivos(e.dataTransfer.files);
+  });
+  contenedorFotos.addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest('button');
+    if (!b) return;
+    if (b.dataset.quitar) fotos.splice(Number(b.dataset.quitar), 1);
+    if (b.dataset.portada) { const [f] = fotos.splice(Number(b.dataset.portada), 1); fotos.unshift(f); }
+    pintarFotos();
+  });
 
   function pintar() {
     const texto = buscar.value.toLowerCase().trim();
@@ -96,7 +161,8 @@ import { JUEGOS } from '../lib/juegos';
       const pct = porcentajeOferta(c);
       return `
       <article class="tarjeta item">
-        <div class="item-portada">${portada(c.juego)}
+        <div class="item-portada">${portadaCuenta(c)}
+          ${c.imagenes?.length ? `<span class="num-fotos">📸 ${c.imagenes.length}</span>` : ''}
           <span class="insignia ${c.estado}">${c.estado}</span>
           ${c.destacada ? '<span class="estrella" title="Destacada">⭐</span>' : ''}
         </div>
@@ -122,11 +188,15 @@ import { JUEGOS } from '../lib/juegos';
     form.reset();
     document.getElementById('titulo-modal')!.textContent = c ? `Editar cuenta ${c.codigo}` : 'Agregar cuenta';
     if (c) {
-      llenarFormulario(form, { ...c, extras: c.extras.join('\n') } as unknown as Record<string, unknown>);
+      const { imagenes, ...datos } = c;
+      llenarFormulario(form, { ...datos, extras: c.extras.join('\n') } as unknown as Record<string, unknown>);
       destacada.checked = c.destacada;
+      fotos = [...(imagenes ?? [])];
     } else {
       llenarFormulario(form, { id: '', nivel: 0, precioAnterior: 0 });
+      fotos = [];
     }
+    pintarFotos();
     modal.showModal();
   }
 
@@ -169,9 +239,15 @@ import { JUEGOS } from '../lib/juegos';
       estado: d.estado as Cuenta['estado'],
       destacada: destacada.checked,
       descripcion: d.descripcion.trim(),
+      imagenes: [...fotos],
       creado: anterior?.creado ?? hoy(),
     };
-    insertarOActualizar('cuentas', cuenta);
+    try {
+      insertarOActualizar('cuentas', cuenta);
+    } catch (err) {
+      if (err instanceof SinEspacioError) return aviso('Sin espacio: quita algunas fotos o usa imágenes más pequeñas', 'error');
+      throw err;
+    }
     modal.close();
     aviso(anterior ? 'Cuenta actualizada' : `Cuenta ${cuenta.codigo} agregada`);
     pintar();
@@ -202,6 +278,30 @@ import { JUEGOS } from '../lib/juegos';
   .rejilla :global(.juego-nombre) { font-size: .8rem; color: var(--texto-suave); }
 
   .campo label small { font-weight: 400; color: var(--texto-suave); }
+  .rejilla :global(.num-fotos) { position: absolute; bottom: .6rem; right: .7rem; z-index: 2; padding: .15rem .5rem; border-radius: 8px; background: rgba(11,14,26,.8); font-size: .75rem; font-weight: 700; }
+  .rejilla :global(.chip-juego) { display: none; }
+
+  .zona-fotos { display: flex; align-items: center; gap: 1rem; padding: 1.1rem; border: 2px dashed var(--borde); border-radius: 12px; background: #0f1322; cursor: pointer; transition: border-color .15s, background .15s; font-weight: 400 !important; }
+  .zona-fotos:hover, .zona-fotos.encima { border-color: var(--morado); background: rgba(124,92,255,.08); }
+  .zona-icono { font-size: 2rem; }
+  .zona-fotos small { color: var(--texto-suave); }
+  .fotos { display: grid; grid-template-columns: repeat(4, 1fr); gap: .6rem; }
+  .fotos:empty { display: none; }
+  .fotos :global(.foto) { position: relative; aspect-ratio: 16 / 10; border-radius: 10px; overflow: hidden; border: 1px solid var(--borde); background: #000; }
+  .fotos :global(.foto img) { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .fotos :global(.es-portada), .fotos :global(.hacer-portada) { position: absolute; left: .3rem; bottom: .3rem; padding: .1rem .4rem; border-radius: 6px; font-size: .65rem; font-weight: 700; border: none; }
+  .fotos :global(.es-portada) { background: var(--amarillo); color: #1a1300; }
+  .fotos :global(.hacer-portada) { background: rgba(11,14,26,.85); color: #fff; cursor: pointer; }
+  .fotos :global(.hacer-portada:hover) { background: var(--morado); }
+  .fotos :global(.quitar) { position: absolute; top: .3rem; right: .3rem; width: 22px; height: 22px; border-radius: 50%; border: none; background: rgba(255,84,112,.9); color: #fff; font-size: .9rem; line-height: 1; cursor: pointer; }
+  .fotos :global(.peso) { position: absolute; top: .3rem; left: .3rem; padding: 0 .3rem; border-radius: 4px; background: rgba(11,14,26,.8); font-size: .6rem; }
+  .espacio { display: flex; align-items: center; gap: .6rem; }
+  .espacio-barra { flex: 1; height: 6px; border-radius: 999px; background: var(--panel-2); overflow: hidden; }
+  .espacio-barra :global(div) { height: 100%; background: var(--verde); transition: width .3s; }
+  .espacio-barra :global(div.medio) { background: var(--amarillo); }
+  .espacio-barra :global(div.lleno) { background: var(--rojo); }
+  .espacio small { font-size: .72rem; color: var(--texto-suave); white-space: nowrap; }
+  @media (max-width: 600px) { .fotos { grid-template-columns: repeat(2, 1fr); } }
   .check { display: flex; align-items: center; gap: .5rem; font-weight: 700; font-size: .9rem; cursor: pointer; }
   .check input { accent-color: var(--morado); width: 18px; height: 18px; }
 </style>
